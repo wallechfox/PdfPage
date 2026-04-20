@@ -2,111 +2,43 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>离线 PDF 工具箱 · 合并/拆分/旋转/删除</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-        }
+        * { box-sizing: border-box; margin: 0; }
         body {
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: #f1f5f9;
-            padding: 32px 24px;
-        }
-        .app {
-            max-width: 1000px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-        }
-        /* 标题 */
-        h1 {
-            font-size: 28px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .subtitle {
-            color: #475569;
-            margin-bottom: 8px;
-            font-size: 15px;
-        }
-        /* 卡片通用样式 */
-        .card {
-            background: white;
-            border-radius: 24px;
-            padding: 24px;
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.02);
-            transition: box-shadow 0.2s;
-            border: 1px solid #e2e8f0;
-        }
-        .card:hover {
-            box-shadow: 0 20px 30px -10px rgba(0,0,0,0.1);
-        }
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #eef2f6;
-        }
-        .card-header h2 {
-            font-size: 20px;
-            font-weight: 600;
-            color: #1e293b;
-            margin: 0;
-        }
-        .card-icon {
-            font-size: 28px;
-        }
-        /* 上传区域 */
-        .upload-area {
-            border: 2px dashed #cbd5e1;
-            border-radius: 16px;
             padding: 24px 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: #fafbfc;
-            margin-bottom: 20px;
+            min-height: 100vh;
         }
-        .upload-area.drag-over {
-            border-color: #2563eb;
-            background: #eff6ff;
-        }
-        .upload-area input {
-            display: none;
-        }
-        .upload-area .primary-text {
-            font-weight: 500;
-            color: #1e293b;
-        }
-        .upload-area .secondary-text {
-            font-size: 13px;
-            color: #64748b;
-            margin-top: 6px;
-        }
-        /* 文件列表 (合并用) */
-        .file-list {
-            margin: 16px 0;
+        .app { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+        h1 { font-size: 28px; font-weight: 600; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+        .subtitle { color: #475569; margin-bottom: 4px; font-size: 15px; }
+        .card {
+            background: white; border-radius: 24px; padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.02);
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            overflow: hidden;
-            background: white;
+        }
+        .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #eef2f6; }
+        .card-header h2 { font-size: 20px; font-weight: 600; color: #1e293b; margin: 0; }
+        .card-icon { font-size: 28px; }
+        .upload-area {
+            border: 2px dashed #cbd5e1; border-radius: 16px; padding: 24px 16px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: #fafbfc; margin-bottom: 20px;
+        }
+        .upload-area.drag-over { border-color: #2563eb; background: #eff6ff; }
+        .upload-area input { display: none; }
+        .upload-area .primary-text { font-weight: 500; color: #1e293b; }
+        .upload-area .secondary-text { font-size: 13px; color: #64748b; margin-top: 6px; }
+        .file-list {
+            margin: 16px 0; border: 1px solid #e2e8f0; border-radius: 12px;
+            overflow: hidden; background: white;
         }
         .file-item {
-            display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            border-bottom: 1px solid #f1f5f9;
-            cursor: grab;
-            transition: background 0.2s;
+            display: flex; align-items: center; padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9; cursor: grab; transition: background 0.2s;
         }
         .file-item:last-child { border-bottom: none; }
         .file-item.dragging { opacity: 0.5; background: #f8fafc; }
@@ -116,110 +48,39 @@
         .file-name { font-weight: 500; color: #1e293b; word-break: break-word; }
         .file-pages { font-size: 12px; background: #f1f5f9; padding: 2px 8px; border-radius: 20px; }
         .file-size { font-size: 12px; color: #64748b; }
-        .remove-file {
-            background: none; border: none; color: #94a3b8; font-size: 18px;
-            cursor: pointer; padding: 4px 8px; border-radius: 6px;
-        }
+        .remove-file { background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
         .remove-file:hover { background: #fee2e2; color: #dc2626; }
-        .empty-message {
-            text-align: center; padding: 30px; color: #94a3b8; font-size: 14px;
-        }
-        /* 配置区域 */
-        .config-row {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 16px;
-            margin: 16px 0 8px;
-        }
-        .config-label {
-            font-weight: 500;
-            color: #334155;
-            min-width: 100px;
-        }
-        .config-input {
-            padding: 10px 14px;
-            border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            font-size: 14px;
-            flex: 1;
-            min-width: 200px;
-        }
-        .config-hint {
-            font-size: 13px;
-            color: #64748b;
-            margin-left: 8px;
-        }
-        .radio-group {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .radio-group label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-        }
-        /* 操作栏 */
-        .action-bar {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
+        .empty-message { text-align: center; padding: 30px; color: #94a3b8; font-size: 14px; }
+        .config-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0 8px; }
+        .config-label { font-weight: 500; color: #334155; min-width: 100px; }
+        .config-input { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 12px; font-size: 14px; flex: 1; min-width: 200px; }
+        .config-hint { font-size: 13px; color: #64748b; margin-left: 8px; }
+        .radio-group { display: flex; gap: 20px; flex-wrap: wrap; }
+        .radio-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .action-bar { display: flex; align-items: center; gap: 16px; margin-top: 20px; flex-wrap: wrap; }
         .btn {
-            padding: 10px 22px;
-            border-radius: 40px;
-            font-weight: 500;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: white;
-            border: 1px solid #cbd5e1;
-            color: #1e293b;
+            padding: 10px 22px; border-radius: 40px; font-weight: 500; font-size: 14px;
+            border: none; cursor: pointer; transition: all 0.2s; background: white;
+            border: 1px solid #cbd5e1; color: #1e293b;
         }
-        .btn-primary {
-            background: #2563eb;
-            border-color: #2563eb;
-            color: white;
-            box-shadow: 0 4px 8px rgba(37,99,235,0.2);
-        }
+        .btn-primary { background: #2563eb; border-color: #2563eb; color: white; box-shadow: 0 4px 8px rgba(37,99,235,0.2); }
         .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
         .btn-secondary:hover { background: #f8fafc; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .status {
-            font-size: 13px;
-            color: #64748b;
-            margin-left: auto;
-        }
-        .progress {
-            width: 100%;
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            margin-top: 16px;
-            overflow: hidden;
-            display: none;
-        }
-        .progress-bar {
-            height: 100%;
-            background: #2563eb;
-            width: 0%;
-            transition: width 0.3s;
-        }
+        .status { font-size: 13px; color: #64748b; margin-left: auto; }
+        .progress { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; margin-top: 16px; overflow: hidden; display: none; }
+        .progress-bar { height: 100%; background: #2563eb; width: 0%; transition: width 0.3s; }
         .explanation-box {
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 14px 16px;
-            margin-top: 16px;
-            font-size: 13px;
-            color: #475569;
-            border-left: 4px solid #2563eb;
+            background: #f8fafc; border-radius: 12px; padding: 14px 16px; margin-top: 16px;
+            font-size: 13px; color: #475569; border-left: 4px solid #2563eb;
         }
         .explanation-box strong { color: #1e293b; }
+        @media (max-width: 640px) {
+            body { padding: 16px 12px; }
+            .card { padding: 18px; }
+            .config-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .config-label { min-width: auto; }
+        }
     </style>
 </head>
 <body>
@@ -227,23 +88,18 @@
     <div>
         <h1>📦 离线PDF工具箱</h1>
         <div class="subtitle">合并 · 拆分 · 旋转 · 删除 — 所有操作均在本地完成</div>
-		<div class="subtitle">By：cxs，20260420</div>
+        <div class="subtitle">适用于各类操作系统，包括Windows、Linux、苹果macOS、安卓等，只要能使用浏览器，就可以使用。</div>
     </div>
 
     <!-- 卡片1: 合并 PDF -->
     <div class="card">
-        <div class="card-header">
-            <span class="card-icon">🔗</span>
-            <h2>合并 PDF</h2>
-        </div>
+        <div class="card-header"><span class="card-icon">🔗</span><h2>合并 PDF</h2></div>
         <div class="upload-area" id="merge-upload-area">
             <div class="primary-text">📁 点击或拖拽上传多个 PDF</div>
             <div class="secondary-text">上传后可拖拽调整顺序</div>
             <input type="file" id="merge-file-input" accept=".pdf,application/pdf" multiple>
         </div>
-        <div id="merge-file-list" class="file-list">
-            <div class="empty-message">暂无文件，请上传</div>
-        </div>
+        <div id="merge-file-list" class="file-list"><div class="empty-message">暂无文件，请上传</div></div>
         <div class="action-bar">
             <button class="btn btn-primary" id="merge-btn" disabled>合并并下载</button>
             <button class="btn btn-secondary" id="clear-merge-btn">清空列表</button>
@@ -254,18 +110,15 @@
 
     <!-- 卡片2: 拆分 PDF -->
     <div class="card">
-        <div class="card-header">
-            <span class="card-icon">✂️</span>
-            <h2>拆分 PDF</h2>
-        </div>
+        <div class="card-header"><span class="card-icon">✂️</span><h2>拆分 PDF</h2></div>
         <div class="upload-area" id="split-upload-area">
             <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
             <div class="secondary-text">仅支持单个文件</div>
             <input type="file" id="split-file-input" accept=".pdf,application/pdf">
         </div>
-        <div id="split-file-info" style="margin-bottom: 16px; padding: 10px 0; display: none;">
-            <span id="split-file-name" style="font-weight: 500;"></span>
-            <span id="split-file-pages" style="margin-left: 12px; color: #475569; font-size: 13px;"></span>
+        <div id="split-file-info" style="margin-bottom:16px;padding:10px 0;display:none;">
+            <span id="split-file-name" style="font-weight:500;"></span>
+            <span id="split-file-pages" style="margin-left:12px;color:#475569;font-size:13px;"></span>
         </div>
         <div class="config-row">
             <span class="config-label">拆分模式</span>
@@ -275,7 +128,7 @@
                 <label><input type="radio" name="split-mode" value="single"> 📃 全部单页</label>
             </div>
         </div>
-        <div id="split-mode-config" style="margin: 8px 0 0 116px;"></div>
+        <div id="split-mode-config" style="margin:8px 0 0 116px;"></div>
         <div class="explanation-box" id="split-explanation"></div>
         <div class="action-bar">
             <button class="btn btn-primary" id="split-btn" disabled>拆分并下载</button>
@@ -286,18 +139,15 @@
 
     <!-- 卡片3: 旋转 PDF -->
     <div class="card">
-        <div class="card-header">
-            <span class="card-icon">🔄</span>
-            <h2>旋转页面</h2>
-        </div>
+        <div class="card-header"><span class="card-icon">🔄</span><h2>旋转页面</h2></div>
         <div class="upload-area" id="rotate-upload-area">
             <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
             <div class="secondary-text">选择页面并旋转</div>
             <input type="file" id="rotate-file-input" accept=".pdf,application/pdf">
         </div>
-        <div id="rotate-file-info" style="margin-bottom: 16px; padding: 10px 0; display: none;">
-            <span id="rotate-file-name" style="font-weight: 500;"></span>
-            <span id="rotate-file-pages" style="margin-left: 12px; color: #475569; font-size: 13px;"></span>
+        <div id="rotate-file-info" style="margin-bottom:16px;padding:10px 0;display:none;">
+            <span id="rotate-file-name" style="font-weight:500;"></span>
+            <span id="rotate-file-pages" style="margin-left:12px;color:#475569;font-size:13px;"></span>
         </div>
         <div class="config-row">
             <span class="config-label">页码范围</span>
@@ -311,9 +161,7 @@
                 <label><input type="radio" name="rotate-direction" value="right"> ↩️ 向右 90°</label>
             </div>
         </div>
-        <div class="explanation-box">
-            <strong>📌 说明：</strong> 选定页面将统一旋转指定方向，生成新的 PDF。
-        </div>
+        <div class="explanation-box"><strong>📌 说明：</strong> 选定页面将统一旋转指定方向，生成新的 PDF。</div>
         <div class="action-bar">
             <button class="btn btn-primary" id="rotate-btn" disabled>旋转并下载</button>
             <span class="status" id="rotate-status"></span>
@@ -323,27 +171,22 @@
 
     <!-- 卡片4: 删除页面 -->
     <div class="card">
-        <div class="card-header">
-            <span class="card-icon">🗑️</span>
-            <h2>删除页面</h2>
-        </div>
+        <div class="card-header"><span class="card-icon">🗑️</span><h2>删除页面</h2></div>
         <div class="upload-area" id="delete-upload-area">
             <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
             <div class="secondary-text">删除指定页面</div>
             <input type="file" id="delete-file-input" accept=".pdf,application/pdf">
         </div>
-        <div id="delete-file-info" style="margin-bottom: 16px; padding: 10px 0; display: none;">
-            <span id="delete-file-name" style="font-weight: 500;"></span>
-            <span id="delete-file-pages" style="margin-left: 12px; color: #475569; font-size: 13px;"></span>
+        <div id="delete-file-info" style="margin-bottom:16px;padding:10px 0;display:none;">
+            <span id="delete-file-name" style="font-weight:500;"></span>
+            <span id="delete-file-pages" style="margin-left:12px;color:#475569;font-size:13px;"></span>
         </div>
         <div class="config-row">
             <span class="config-label">删除页面</span>
             <input type="text" id="delete-range-input" class="config-input" placeholder="例: 2,4,6-8">
             <span class="config-hint">必填，支持范围和逗号分隔</span>
         </div>
-        <div class="explanation-box">
-            <strong>📌 说明：</strong> 输入要删除的页码，其余页面将保留并生成新 PDF。
-        </div>
+        <div class="explanation-box"><strong>📌 说明：</strong> 输入要删除的页码，其余页面将保留并生成新 PDF。</div>
         <div class="action-bar">
             <button class="btn btn-primary" id="delete-btn" disabled>删除并下载</button>
             <span class="status" id="delete-status"></span>
@@ -372,7 +215,7 @@
 
         // 通用页面范围解析 (返回0-based索引数组)
         function parsePageRanges(input, maxPage) {
-            if (!input.trim()) return []; // 空字符串返回空数组
+            if (!input.trim()) return [];
             const pages = new Set();
             const parts = input.split(',').map(s => s.trim());
             for (const part of parts) {
@@ -386,10 +229,9 @@
                     if (n >= 1 && n <= maxPage) pages.add(n);
                 }
             }
-            return Array.from(pages).sort((a,b)=>a-b).map(p => p-1); // 转为0-based
+            return Array.from(pages).sort((a,b)=>a-b).map(p => p-1);
         }
 
-        // 下载Blob
         function downloadBlob(blob, filename) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -399,7 +241,7 @@
 
         // ---------- 全局状态 ----------
         const state = {
-            mergeFiles: [],           // { id, file, name, size, pages }
+            mergeFiles: [],
             splitFile: null, splitPageCount: 0,
             rotateFile: null, rotatePageCount: 0,
             deleteFile: null, deletePageCount: 0
@@ -474,7 +316,7 @@
                 try {
                     const pages = await getPdfPageCount(f);
                     newFiles.push({ id: genId(), file: f, name: f.name, size: f.size, pages });
-                } catch(e){}
+                } catch(e){ console.warn(e); }
                 mergeBar.style.width = ((i+1)/files.length*100)+'%';
             }
             state.mergeFiles = [...state.mergeFiles, ...newFiles];
@@ -505,7 +347,7 @@
                 for(let i=0; i<state.mergeFiles.length; i++){
                     const f = state.mergeFiles[i];
                     const buf = await f.file.arrayBuffer();
-                    const pdf = await PDFLib.PDFDocument.load(buf);
+                    const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
                     const pages = await merged.copyPages(pdf, pdf.getPageIndices());
                     pages.forEach(p=>merged.addPage(p));
                     mergeBar.style.width = ((i+1)/state.mergeFiles.length*100)+'%';
@@ -581,7 +423,7 @@
             splitProgress.style.display='block'; splitBar.style.width='0%';
             try{
                 const buf = await state.splitFile.arrayBuffer();
-                const srcPdf = await PDFLib.PDFDocument.load(buf);
+                const srcPdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
                 const total = srcPdf.getPageCount();
                 let ranges = [];
                 if(mode==='range'){
@@ -589,7 +431,7 @@
                     if(!input) throw new Error('请输入页码范围');
                     const pages = parsePageRanges(input, total);
                     if(pages.length===0) throw new Error('未选中页面');
-                    ranges = [pages]; // 一个范围，提取后合并
+                    ranges = [pages];
                 } else if(mode==='fixed'){
                     const per = parseInt(document.getElementById('fixed-pages').value,10);
                     if(per<1) throw new Error('页数必须>0');
@@ -656,65 +498,39 @@
         });
         rotateInput.addEventListener('change', e=>{ if(e.target.files[0]) loadRotateFile(e.target.files[0]); rotateInput.value=''; });
 
-       
-	   
-	   rotateBtn.addEventListener('click', async ()=>{
-    if(!state.rotateFile) return;
-    
-    const rangeStr = document.getElementById('rotate-range-input').value.trim();
-    const dir = document.querySelector('input[name="rotate-direction"]:checked').value;
-    const delta = dir === 'left' ? 270 : 90;
-    
-    rotateBtn.disabled = true;
-    rotateStatus.textContent = '旋转中...';
-    rotateProgress.style.display = 'block';
-    rotateBar.style.width = '0%';
-    
-    try {
-        const buf = await state.rotateFile.arrayBuffer();
-        const pdf = await PDFLib.PDFDocument.load(buf);
-        const total = pdf.getPageCount();
-        
-        let indices;
-        if (rangeStr === '') {
-            indices = Array.from({ length: total }, (_, i) => i);
-        } else {
-            indices = parsePageRanges(rangeStr, total);
-            if (indices.length === 0) throw new Error('未选中任何有效页面');
-        }
-        
-        for (const idx of indices) {
-            const page = pdf.getPage(idx);
-            const currentAngle = page.getRotation().angle;
-            
-            let newAngle = (currentAngle + delta) % 360;
-            newAngle = Math.round(newAngle);
-            const validAngles = [0, 90, 180, 270];
-            if (!validAngles.includes(newAngle)) {
-                newAngle = validAngles.reduce((prev, curr) => 
-                    Math.abs(curr - newAngle) < Math.abs(prev - newAngle) ? curr : prev
-                );
-            }
-            
-            // 关键：必须使用 PDFLib.degrees 转换
-            page.setRotation(PDFLib.degrees(newAngle));
-            
-            console.log(`页面 ${idx+1}: 旋转至 ${newAngle}°`);
-        }
-        
-        const bytes = await pdf.save();
-        const base = state.rotateFile.name.replace(/\.pdf$/i, '');
-        downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${base}_rotated.pdf`);
-        rotateStatus.textContent = `✅ 已旋转 ${indices.length} 页`;
-        
-    } catch (error) {
-        console.error('旋转失败:', error);
-        rotateStatus.textContent = `❌ 旋转失败: ${error.message}`;
-    } finally {
-        rotateBtn.disabled = false;
-        rotateProgress.style.display = 'none';
-    }
-});
+        rotateBtn.addEventListener('click', async ()=>{
+            if(!state.rotateFile) return;
+            const rangeStr = document.getElementById('rotate-range-input').value.trim();
+            const dir = document.querySelector('input[name="rotate-direction"]:checked').value;
+            const delta = dir==='left' ? 270 : 90;
+            rotateBtn.disabled = true; rotateStatus.textContent='旋转中...';
+            rotateProgress.style.display='block'; rotateBar.style.width='0%';
+            try{
+                const buf = await state.rotateFile.arrayBuffer();
+                const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+                const total = pdf.getPageCount();
+                let indices;
+                if(rangeStr === ''){
+                    indices = Array.from({length: total}, (_,i)=>i);
+                } else {
+                    indices = parsePageRanges(rangeStr, total);
+                    if(indices.length===0) throw new Error('未选中任何页面');
+                }
+                for(const idx of indices){
+                    const page = pdf.getPage(idx);
+                    const cur = page.getRotation().angle;
+                    let newAngle = (cur + delta) % 360;
+                    newAngle = Math.round(newAngle);
+                    if (![0,90,180,270].includes(newAngle)) newAngle = 0;
+                    page.setRotation(PDFLib.degrees(newAngle));
+                }
+                const bytes = await pdf.save();
+                const base = state.rotateFile.name.replace(/\.pdf$/i,'');
+                downloadBlob(new Blob([bytes],{type:'application/pdf'}), `${base}_rotated.pdf`);
+                rotateStatus.textContent = `✅ 已旋转 ${indices.length} 页`;
+            }catch(e){ rotateStatus.textContent='❌ '+e.message; }
+            finally{ rotateBtn.disabled=false; rotateProgress.style.display='none'; }
+        });
 
         // ---------- 4. 删除页面 ----------
         const deleteArea = document.getElementById('delete-upload-area');
@@ -758,7 +574,7 @@
             deleteProgress.style.display='block'; deleteBar.style.width='0%';
             try{
                 const buf = await state.deleteFile.arrayBuffer();
-                const srcPdf = await PDFLib.PDFDocument.load(buf);
+                const srcPdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
                 const total = srcPdf.getPageCount();
                 const toDelete = parsePageRanges(rangeStr, total);
                 if(toDelete.length===0) throw new Error('未选中有效页面');
@@ -776,7 +592,6 @@
             finally{ deleteBtn.disabled=false; deleteProgress.style.display='none'; }
         });
 
-        // 初始化合并列表
         renderMergeList();
     })();
 </script>
