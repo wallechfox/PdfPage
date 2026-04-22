@@ -88,7 +88,7 @@
     <div>
         <h1>📦 离线PDF工具箱</h1>
         <div class="subtitle">合并 · 拆分 · 旋转 · 删除 — 所有操作均在本地完成</div>
-        <div class="subtitle">适用于各类操作系统，包括Windows、Linux、苹果macOS、安卓等，只要能使用浏览器，就可以使用。</div>
+        <div class="subtitle">适用于各类操作系统，包括Windows、Linux、苹果macOS、安卓、麒麟等，只要能使用浏览器，就可以使用。</div>
     </div>
 
     <!-- 卡片1: 合并 PDF -->
@@ -195,6 +195,7 @@
     </div>
 </div>
 
+<!-- 引入 pdf-lib 库（离线） -->
 <script>
 !function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"function"==typeof define&&define.amd?define(["exports"],e):e((t=t||self).PDFLib={})}(this,(function(t){"use strict";
 /*! *****************************************************************************
@@ -216,7 +217,26 @@
 </script>
 <script>
     (function(){
-        const PDFLib = window.PDFLib;
+        var PDFLib = window.PDFLib;
+
+        // ---------- 兼容性：通用文件转 ArrayBuffer (替代 file.arrayBuffer) ----------
+        function fileToArrayBuffer(file) {
+            // 如果浏览器支持现代方法，直接使用
+            if (typeof file.arrayBuffer === 'function') {
+                return file.arrayBuffer();
+            }
+            // 降级使用 FileReader (兼容 IE10+, Chrome 76- 等)
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    resolve(e.target.result);
+                };
+                reader.onerror = function(e) {
+                    reject(new Error('文件读取失败'));
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
 
         // ---------- 辅助函数 ----------
         function formatFileSize(bytes) {
@@ -224,56 +244,73 @@
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
         }
+
         async function getPdfPageCount(file) {
-            const buf = await file.arrayBuffer();
-            const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+            var arrayBuffer = await fileToArrayBuffer(file);
+            var pdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
             return pdf.getPageCount();
         }
-        function genId() { return Date.now() + '-' + Math.random().toString(36).substr(2,9); }
+
+        function genId() {
+            return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
 
         // 通用页面范围解析 (返回0-based索引数组)
         function parsePageRanges(input, maxPage) {
             if (!input.trim()) return [];
-            const pages = new Set();
-            const parts = input.split(',').map(s => s.trim());
-            for (const part of parts) {
-                if (part.includes('-')) {
-                    let [start, end] = part.split('-').map(Number);
-                    start = Math.max(1, start);
-                    end = Math.min(end, maxPage);
-                    for (let i = start; i <= end; i++) pages.add(i);
+            var pagesSet = new Set();
+            var parts = input.split(',').map(function(s) { return s.trim(); });
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (part.indexOf('-') !== -1) {
+                    var rangeParts = part.split('-').map(Number);
+                    var start = Math.max(1, rangeParts[0]);
+                    var end = Math.min(rangeParts[1], maxPage);
+                    for (var p = start; p <= end; p++) {
+                        pagesSet.add(p);
+                    }
                 } else {
-                    const n = parseInt(part, 10);
-                    if (n >= 1 && n <= maxPage) pages.add(n);
+                    var n = parseInt(part, 10);
+                    if (n >= 1 && n <= maxPage) {
+                        pagesSet.add(n);
+                    }
                 }
             }
-            return Array.from(pages).sort((a,b)=>a-b).map(p => p-1);
+            var sorted = Array.from(pagesSet).sort(function(a, b) { return a - b; });
+            return sorted.map(function(p) { return p - 1; });
         }
 
         function downloadBlob(blob, filename) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = filename; a.click();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
 
         // ---------- 全局状态 ----------
-        const state = {
+        var state = {
             mergeFiles: [],
-            splitFile: null, splitPageCount: 0,
-            rotateFile: null, rotatePageCount: 0,
-            deleteFile: null, deletePageCount: 0
+            splitFile: null,
+            splitPageCount: 0,
+            rotateFile: null,
+            rotatePageCount: 0,
+            deleteFile: null,
+            deletePageCount: 0
         };
 
         // ---------- 1. 合并功能 ----------
-        const mergeArea = document.getElementById('merge-upload-area');
-        const mergeInput = document.getElementById('merge-file-input');
-        const mergeList = document.getElementById('merge-file-list');
-        const mergeBtn = document.getElementById('merge-btn');
-        const clearMergeBtn = document.getElementById('clear-merge-btn');
-        const mergeStatus = document.getElementById('merge-status');
-        const mergeProgress = document.getElementById('merge-progress');
-        const mergeBar = mergeProgress.querySelector('.progress-bar');
+        var mergeArea = document.getElementById('merge-upload-area');
+        var mergeInput = document.getElementById('merge-file-input');
+        var mergeList = document.getElementById('merge-file-list');
+        var mergeBtn = document.getElementById('merge-btn');
+        var clearMergeBtn = document.getElementById('clear-merge-btn');
+        var mergeStatus = document.getElementById('merge-status');
+        var mergeProgress = document.getElementById('merge-progress');
+        var mergeBar = mergeProgress.querySelector('.progress-bar');
 
         function renderMergeList() {
             if (state.mergeFiles.length === 0) {
@@ -281,335 +318,471 @@
                 mergeBtn.disabled = true;
                 return;
             }
-            let html = '';
-            state.mergeFiles.forEach(f => {
-                html += `<div class="file-item" draggable="true" data-id="${f.id}">
-                    <span class="drag-handle">☰</span>
-                    <div class="file-info"><span class="file-name">${f.name}</span><span class="file-pages">${f.pages}页</span><span class="file-size">${formatFileSize(f.size)}</span></div>
-                    <button class="remove-file" data-id="${f.id}">✕</button>
-                </div>`;
+            var html = '';
+            state.mergeFiles.forEach(function(f) {
+                html += '<div class="file-item" draggable="true" data-id="' + f.id + '">' +
+                    '<span class="drag-handle">☰</span>' +
+                    '<div class="file-info">' +
+                        '<span class="file-name">' + f.name + '</span>' +
+                        '<span class="file-pages">' + f.pages + '页</span>' +
+                        '<span class="file-size">' + formatFileSize(f.size) + '</span>' +
+                    '</div>' +
+                    '<button class="remove-file" data-id="' + f.id + '">✕</button>' +
+                '</div>';
             });
             mergeList.innerHTML = html;
             mergeBtn.disabled = state.mergeFiles.length < 2;
-            document.querySelectorAll('.remove-file').forEach(b => {
-                b.addEventListener('click', e => {
+
+            // 绑定移除事件
+            var removeBtns = document.querySelectorAll('.remove-file');
+            for (var i = 0; i < removeBtns.length; i++) {
+                removeBtns[i].addEventListener('click', function(e) {
                     e.stopPropagation();
-                    const id = b.dataset.id;
-                    state.mergeFiles = state.mergeFiles.filter(f => f.id !== id);
+                    var id = this.getAttribute('data-id');
+                    state.mergeFiles = state.mergeFiles.filter(function(f) { return f.id !== id; });
                     renderMergeList();
-                    mergeStatus.textContent = state.mergeFiles.length ? `已添加 ${state.mergeFiles.length} 个文件` : '';
+                    mergeStatus.textContent = state.mergeFiles.length ? '已添加 ' + state.mergeFiles.length + ' 个文件' : '';
                 });
-            });
+            }
+
             // 拖拽排序
-            const items = document.querySelectorAll('.file-item');
-            let dragSrc = null;
-            items.forEach(item => {
-                item.addEventListener('dragstart', e => { dragSrc = item; item.classList.add('dragging'); e.dataTransfer.setData('text/plain', item.dataset.id); });
-                item.addEventListener('dragend', () => { item.classList.remove('dragging'); items.forEach(i=>i.classList.remove('drag-over')); });
-                item.addEventListener('dragover', e => { e.preventDefault(); if(item!==dragSrc) item.classList.add('drag-over'); });
-                item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-                item.addEventListener('drop', e => {
-                    e.preventDefault(); item.classList.remove('drag-over');
-                    if(dragSrc && item!==dragSrc){
-                        const srcId = dragSrc.dataset.id, tgtId = item.dataset.id;
-                        const srcIdx = state.mergeFiles.findIndex(f=>f.id===srcId);
-                        const tgtIdx = state.mergeFiles.findIndex(f=>f.id===tgtId);
-                        if(srcIdx!==-1 && tgtIdx!==-1){
-                            const [moved] = state.mergeFiles.splice(srcIdx,1);
-                            state.mergeFiles.splice(tgtIdx,0,moved);
+            var items = document.querySelectorAll('.file-item');
+            var dragSrc = null;
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                item.addEventListener('dragstart', function(e) {
+                    dragSrc = this;
+                    this.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', this.getAttribute('data-id'));
+                });
+                item.addEventListener('dragend', function() {
+                    this.classList.remove('dragging');
+                    for (var j = 0; j < items.length; j++) {
+                        items[j].classList.remove('drag-over');
+                    }
+                    dragSrc = null;
+                });
+                item.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    if (this !== dragSrc) {
+                        this.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', function() {
+                    this.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    this.classList.remove('drag-over');
+                    if (dragSrc && this !== dragSrc) {
+                        var srcId = dragSrc.getAttribute('data-id');
+                        var tgtId = this.getAttribute('data-id');
+                        var srcIdx = state.mergeFiles.findIndex(function(f) { return f.id === srcId; });
+                        var tgtIdx = state.mergeFiles.findIndex(function(f) { return f.id === tgtId; });
+                        if (srcIdx !== -1 && tgtIdx !== -1) {
+                            var moved = state.mergeFiles.splice(srcIdx, 1)[0];
+                            state.mergeFiles.splice(tgtIdx, 0, moved);
                             renderMergeList();
                         }
                     }
                 });
-            });
+            }
         }
 
         async function addMergeFiles(files) {
             mergeStatus.textContent = '读取页数...';
-            mergeProgress.style.display = 'block'; mergeBar.style.width = '0%';
-            const newFiles = [];
-            for (let i=0; i<files.length; i++) {
-                const f = files[i];
-                if(f.type !== 'application/pdf') continue;
+            mergeProgress.style.display = 'block';
+            mergeBar.style.width = '0%';
+            var newFiles = [];
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                if (f.type !== 'application/pdf') continue;
                 try {
-                    const pages = await getPdfPageCount(f);
-                    newFiles.push({ id: genId(), file: f, name: f.name, size: f.size, pages });
-                } catch(e){ console.warn(e); }
-                mergeBar.style.width = ((i+1)/files.length*100)+'%';
+                    var pages = await getPdfPageCount(f);
+                    newFiles.push({
+                        id: genId(),
+                        file: f,
+                        name: f.name,
+                        size: f.size,
+                        pages: pages
+                    });
+                } catch(e) {
+                    console.warn(e);
+                }
+                mergeBar.style.width = ((i + 1) / files.length * 100) + '%';
             }
-            state.mergeFiles = [...state.mergeFiles, ...newFiles];
+            state.mergeFiles = state.mergeFiles.concat(newFiles);
             renderMergeList();
-            mergeStatus.textContent = `已添加 ${state.mergeFiles.length} 个文件`;
+            mergeStatus.textContent = '已添加 ' + state.mergeFiles.length + ' 个文件';
             mergeProgress.style.display = 'none';
         }
 
-        mergeArea.addEventListener('click', ()=>mergeInput.click());
-        mergeArea.addEventListener('dragover', e=>{ e.preventDefault(); mergeArea.classList.add('drag-over'); });
-        mergeArea.addEventListener('dragleave', ()=>mergeArea.classList.remove('drag-over'));
-        mergeArea.addEventListener('drop', e=>{
-            e.preventDefault(); mergeArea.classList.remove('drag-over');
-            const files = Array.from(e.dataTransfer.files);
-            if(files.length) addMergeFiles(files);
+        mergeArea.addEventListener('click', function() { mergeInput.click(); });
+        mergeArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            mergeArea.classList.add('drag-over');
         });
-        mergeInput.addEventListener('change', e=>{
-            if(e.target.files.length) addMergeFiles(Array.from(e.target.files));
+        mergeArea.addEventListener('dragleave', function() {
+            mergeArea.classList.remove('drag-over');
+        });
+        mergeArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            mergeArea.classList.remove('drag-over');
+            var files = Array.from(e.dataTransfer.files);
+            if (files.length) addMergeFiles(files);
+        });
+        mergeInput.addEventListener('change', function(e) {
+            if (e.target.files.length) {
+                addMergeFiles(Array.from(e.target.files));
+            }
             mergeInput.value = '';
         });
-        clearMergeBtn.addEventListener('click', ()=>{ state.mergeFiles = []; renderMergeList(); mergeStatus.textContent=''; });
-        mergeBtn.addEventListener('click', async ()=>{
-            if(state.mergeFiles.length<2) return;
-            mergeBtn.disabled = true; mergeStatus.textContent='合并中...';
-            mergeProgress.style.display='block'; mergeBar.style.width='0%';
-            try{
-                const merged = await PDFLib.PDFDocument.create();
-                for(let i=0; i<state.mergeFiles.length; i++){
-                    const f = state.mergeFiles[i];
-                    const buf = await f.file.arrayBuffer();
-                    const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
-                    const pages = await merged.copyPages(pdf, pdf.getPageIndices());
-                    pages.forEach(p=>merged.addPage(p));
-                    mergeBar.style.width = ((i+1)/state.mergeFiles.length*100)+'%';
+        clearMergeBtn.addEventListener('click', function() {
+            state.mergeFiles = [];
+            renderMergeList();
+            mergeStatus.textContent = '';
+        });
+        mergeBtn.addEventListener('click', async function() {
+            if (state.mergeFiles.length < 2) return;
+            mergeBtn.disabled = true;
+            mergeStatus.textContent = '合并中...';
+            mergeProgress.style.display = 'block';
+            mergeBar.style.width = '0%';
+            try {
+                var merged = await PDFLib.PDFDocument.create();
+                for (var i = 0; i < state.mergeFiles.length; i++) {
+                    var f = state.mergeFiles[i];
+                    var arrayBuffer = await fileToArrayBuffer(f.file);
+                    var pdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                    var pages = await merged.copyPages(pdf, pdf.getPageIndices());
+                    pages.forEach(function(p) { merged.addPage(p); });
+                    mergeBar.style.width = ((i + 1) / state.mergeFiles.length * 100) + '%';
                 }
-                const bytes = await merged.save();
-                downloadBlob(new Blob([bytes],{type:'application/pdf'}), 'merged.pdf');
-                mergeStatus.textContent='✅ 合并完成';
-            }catch(e){ mergeStatus.textContent='❌ 失败: '+e.message; }
-            finally{ mergeBtn.disabled=false; mergeProgress.style.display='none'; }
+                var bytes = await merged.save();
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), 'merged.pdf');
+                mergeStatus.textContent = '✅ 合并完成';
+            } catch(e) {
+                mergeStatus.textContent = '❌ 失败: ' + e.message;
+            } finally {
+                mergeBtn.disabled = false;
+                mergeProgress.style.display = 'none';
+            }
         });
 
         // ---------- 2. 拆分功能 ----------
-        const splitArea = document.getElementById('split-upload-area');
-        const splitInput = document.getElementById('split-file-input');
-        const splitInfo = document.getElementById('split-file-info');
-        const splitName = document.getElementById('split-file-name');
-        const splitPages = document.getElementById('split-file-pages');
-        const splitModeConfig = document.getElementById('split-mode-config');
-        const splitBtn = document.getElementById('split-btn');
-        const splitStatus = document.getElementById('split-status');
-        const splitProgress = document.getElementById('split-progress');
-        const splitBar = splitProgress.querySelector('.progress-bar');
-        const splitExplanation = document.getElementById('split-explanation');
-        const modeRadios = document.querySelectorAll('input[name="split-mode"]');
+        var splitArea = document.getElementById('split-upload-area');
+        var splitInput = document.getElementById('split-file-input');
+        var splitInfo = document.getElementById('split-file-info');
+        var splitName = document.getElementById('split-file-name');
+        var splitPages = document.getElementById('split-file-pages');
+        var splitModeConfig = document.getElementById('split-mode-config');
+        var splitBtn = document.getElementById('split-btn');
+        var splitStatus = document.getElementById('split-status');
+        var splitProgress = document.getElementById('split-progress');
+        var splitBar = splitProgress.querySelector('.progress-bar');
+        var splitExplanation = document.getElementById('split-explanation');
+        var modeRadios = document.querySelectorAll('input[name="split-mode"]');
 
         function updateSplitUI() {
-            const mode = document.querySelector('input[name="split-mode"]:checked').value;
-            let html='', expl='';
-            if(mode==='range'){
-                html = `<input type="text" id="range-input" placeholder="例: 1-3,5,7-9" style="width:100%; padding:10px; border-radius:12px; border:1px solid #cbd5e1;">`;
+            var mode = document.querySelector('input[name="split-mode"]:checked').value;
+            var html = '', expl = '';
+            if (mode === 'range') {
+                html = '<input type="text" id="range-input" placeholder="例: 1-3,5,7-9" style="width:100%; padding:10px; border-radius:12px; border:1px solid #cbd5e1;">';
                 expl = '<strong>📄 页码范围：</strong>输入要提取的页码，如 1-3,5,7-9。将合并为一个PDF。';
-            } else if(mode==='fixed'){
-                html = `<input type="number" id="fixed-pages" min="1" value="1" style="width:100px; padding:10px; border-radius:12px; border:1px solid #cbd5e1;"> <span style="margin-left:8px; color:#64748b;">每份页数</span>`;
+            } else if (mode === 'fixed') {
+                html = '<input type="number" id="fixed-pages" min="1" value="1" style="width:100px; padding:10px; border-radius:12px; border:1px solid #cbd5e1;"> <span style="margin-left:8px; color:#64748b;">每份页数</span>';
                 expl = '<strong>🔢 固定页数：</strong>每 N 页拆分为一个独立PDF，最后一份可能不足。';
             } else {
-                html = `<span style="color:#64748b;">将每一页拆分为独立PDF文件。</span>`;
+                html = '<span style="color:#64748b;">将每一页拆分为独立PDF文件。</span>';
                 expl = '<strong>📃 全部单页：</strong>每一页生成一个单独PDF。';
             }
             splitModeConfig.innerHTML = html;
             splitExplanation.innerHTML = expl;
         }
-        modeRadios.forEach(r=>r.addEventListener('change', updateSplitUI));
+        for (var i = 0; i < modeRadios.length; i++) {
+            modeRadios[i].addEventListener('change', updateSplitUI);
+        }
         updateSplitUI();
 
         async function loadSplitFile(file) {
-            if(file.type!=='application/pdf') { alert('请选择PDF'); return; }
-            splitStatus.textContent='读取中...'; splitProgress.style.display='block'; splitBar.style.width='0%';
-            try{
-                const pages = await getPdfPageCount(file);
-                state.splitFile = file; state.splitPageCount = pages;
+            if (file.type !== 'application/pdf') {
+                alert('请选择PDF文件');
+                return;
+            }
+            splitStatus.textContent = '读取中...';
+            splitProgress.style.display = 'block';
+            splitBar.style.width = '0%';
+            try {
+                var pages = await getPdfPageCount(file);
+                state.splitFile = file;
+                state.splitPageCount = pages;
                 splitName.textContent = file.name;
-                splitPages.textContent = `${pages} 页 · ${formatFileSize(file.size)}`;
+                splitPages.textContent = pages + ' 页 · ' + formatFileSize(file.size);
                 splitInfo.style.display = 'flex';
                 splitBtn.disabled = false;
                 splitStatus.textContent = '';
-            }catch(e){ splitStatus.textContent='❌ 读取失败'; }
-            finally{ splitProgress.style.display='none'; }
+            } catch(e) {
+                splitStatus.textContent = '❌ 读取失败';
+            } finally {
+                splitProgress.style.display = 'none';
+            }
         }
 
-        splitArea.addEventListener('click', ()=>splitInput.click());
-        splitArea.addEventListener('dragover', e=>{ e.preventDefault(); splitArea.classList.add('drag-over'); });
-        splitArea.addEventListener('dragleave', ()=>splitArea.classList.remove('drag-over'));
-        splitArea.addEventListener('drop', e=>{
-            e.preventDefault(); splitArea.classList.remove('drag-over');
-            const f = e.dataTransfer.files[0]; if(f) loadSplitFile(f);
+        splitArea.addEventListener('click', function() { splitInput.click(); });
+        splitArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            splitArea.classList.add('drag-over');
         });
-        splitInput.addEventListener('change', e=>{ if(e.target.files[0]) loadSplitFile(e.target.files[0]); splitInput.value=''; });
+        splitArea.addEventListener('dragleave', function() {
+            splitArea.classList.remove('drag-over');
+        });
+        splitArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            splitArea.classList.remove('drag-over');
+            var f = e.dataTransfer.files[0];
+            if (f) loadSplitFile(f);
+        });
+        splitInput.addEventListener('change', function(e) {
+            if (e.target.files[0]) loadSplitFile(e.target.files[0]);
+            splitInput.value = '';
+        });
 
-        splitBtn.addEventListener('click', async ()=>{
-            if(!state.splitFile) return;
-            const mode = document.querySelector('input[name="split-mode"]:checked').value;
-            splitBtn.disabled = true; splitStatus.textContent='拆分中...';
-            splitProgress.style.display='block'; splitBar.style.width='0%';
-            try{
-                const buf = await state.splitFile.arrayBuffer();
-                const srcPdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
-                const total = srcPdf.getPageCount();
-                let ranges = [];
-                if(mode==='range'){
-                    const input = document.getElementById('range-input').value.trim();
-                    if(!input) throw new Error('请输入页码范围');
-                    const pages = parsePageRanges(input, total);
-                    if(pages.length===0) throw new Error('未选中页面');
+        splitBtn.addEventListener('click', async function() {
+            if (!state.splitFile) return;
+            var mode = document.querySelector('input[name="split-mode"]:checked').value;
+            splitBtn.disabled = true;
+            splitStatus.textContent = '拆分中...';
+            splitProgress.style.display = 'block';
+            splitBar.style.width = '0%';
+            try {
+                var arrayBuffer = await fileToArrayBuffer(state.splitFile);
+                var srcPdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                var total = srcPdf.getPageCount();
+                var ranges = [];
+                if (mode === 'range') {
+                    var input = document.getElementById('range-input').value.trim();
+                    if (!input) throw new Error('请输入页码范围');
+                    var pages = parsePageRanges(input, total);
+                    if (pages.length === 0) throw new Error('未选中页面');
                     ranges = [pages];
-                } else if(mode==='fixed'){
-                    const per = parseInt(document.getElementById('fixed-pages').value,10);
-                    if(per<1) throw new Error('页数必须>0');
-                    for(let i=0; i<total; i+=per){
-                        const end = Math.min(i+per, total);
-                        const arr = [];
-                        for(let j=i; j<end; j++) arr.push(j);
+                } else if (mode === 'fixed') {
+                    var per = parseInt(document.getElementById('fixed-pages').value, 10);
+                    if (per < 1) throw new Error('页数必须大于0');
+                    for (var i = 0; i < total; i += per) {
+                        var end = Math.min(i + per, total);
+                        var arr = [];
+                        for (var j = i; j < end; j++) arr.push(j);
                         ranges.push(arr);
                     }
                 } else {
-                    for(let i=0; i<total; i++) ranges.push([i]);
+                    for (var i = 0; i < total; i++) ranges.push([i]);
                 }
-                for(let idx=0; idx<ranges.length; idx++){
-                    const indices = ranges[idx];
-                    const newPdf = await PDFLib.PDFDocument.create();
-                    const pages = await newPdf.copyPages(srcPdf, indices);
-                    pages.forEach(p=>newPdf.addPage(p));
-                    const bytes = await newPdf.save();
-                    let suffix = '';
-                    if(mode==='range') suffix='selected';
-                    else if(mode==='fixed') suffix=`part${idx+1}`;
-                    else suffix=`page${indices[0]+1}`;
-                    const base = state.splitFile.name.replace(/\.pdf$/i,'');
-                    downloadBlob(new Blob([bytes],{type:'application/pdf'}), `${base}_${suffix}.pdf`);
-                    splitBar.style.width = ((idx+1)/ranges.length*100)+'%';
-                    await new Promise(r=>setTimeout(r,80));
+                for (var idx = 0; idx < ranges.length; idx++) {
+                    var indices = ranges[idx];
+                    var newPdf = await PDFLib.PDFDocument.create();
+                    var pages = await newPdf.copyPages(srcPdf, indices);
+                    pages.forEach(function(p) { newPdf.addPage(p); });
+                    var bytes = await newPdf.save();
+                    var suffix = '';
+                    if (mode === 'range') suffix = 'selected';
+                    else if (mode === 'fixed') suffix = 'part' + (idx + 1);
+                    else suffix = 'page' + (indices[0] + 1);
+                    var base = state.splitFile.name.replace(/\.pdf$/i, '');
+                    downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_' + suffix + '.pdf');
+                    splitBar.style.width = ((idx + 1) / ranges.length * 100) + '%';
+                    await new Promise(function(r) { setTimeout(r, 80); });
                 }
-                splitStatus.textContent = `✅ 完成，${ranges.length}个文件`;
-            }catch(e){ splitStatus.textContent='❌ '+e.message; }
-            finally{ splitBtn.disabled=false; splitProgress.style.display='none'; }
+                splitStatus.textContent = '✅ 完成，' + ranges.length + '个文件';
+            } catch(e) {
+                splitStatus.textContent = '❌ ' + e.message;
+            } finally {
+                splitBtn.disabled = false;
+                splitProgress.style.display = 'none';
+            }
         });
 
         // ---------- 3. 旋转功能 ----------
-        const rotateArea = document.getElementById('rotate-upload-area');
-        const rotateInput = document.getElementById('rotate-file-input');
-        const rotateInfo = document.getElementById('rotate-file-info');
-        const rotateName = document.getElementById('rotate-file-name');
-        const rotatePagesSpan = document.getElementById('rotate-file-pages');
-        const rotateBtn = document.getElementById('rotate-btn');
-        const rotateStatus = document.getElementById('rotate-status');
-        const rotateProgress = document.getElementById('rotate-progress');
-        const rotateBar = rotateProgress.querySelector('.progress-bar');
+        var rotateArea = document.getElementById('rotate-upload-area');
+        var rotateInput = document.getElementById('rotate-file-input');
+        var rotateInfo = document.getElementById('rotate-file-info');
+        var rotateName = document.getElementById('rotate-file-name');
+        var rotatePagesSpan = document.getElementById('rotate-file-pages');
+        var rotateBtn = document.getElementById('rotate-btn');
+        var rotateStatus = document.getElementById('rotate-status');
+        var rotateProgress = document.getElementById('rotate-progress');
+        var rotateBar = rotateProgress.querySelector('.progress-bar');
 
         async function loadRotateFile(file) {
-            if(file.type!=='application/pdf') return;
-            rotateStatus.textContent='读取中...'; rotateProgress.style.display='block'; rotateBar.style.width='0%';
-            try{
-                const pages = await getPdfPageCount(file);
-                state.rotateFile = file; state.rotatePageCount = pages;
+            if (file.type !== 'application/pdf') return;
+            rotateStatus.textContent = '读取中...';
+            rotateProgress.style.display = 'block';
+            rotateBar.style.width = '0%';
+            try {
+                var pages = await getPdfPageCount(file);
+                state.rotateFile = file;
+                state.rotatePageCount = pages;
                 rotateName.textContent = file.name;
-                rotatePagesSpan.textContent = `${pages} 页 · ${formatFileSize(file.size)}`;
+                rotatePagesSpan.textContent = pages + ' 页 · ' + formatFileSize(file.size);
                 rotateInfo.style.display = 'flex';
                 rotateBtn.disabled = false;
                 rotateStatus.textContent = '';
-            }catch(e){ rotateStatus.textContent='❌ 读取失败'; }
-            finally{ rotateProgress.style.display='none'; }
+            } catch(e) {
+                rotateStatus.textContent = '❌ 读取失败';
+            } finally {
+                rotateProgress.style.display = 'none';
+            }
         }
-        rotateArea.addEventListener('click', ()=>rotateInput.click());
-        rotateArea.addEventListener('dragover', e=>{ e.preventDefault(); rotateArea.classList.add('drag-over'); });
-        rotateArea.addEventListener('dragleave', ()=>rotateArea.classList.remove('drag-over'));
-        rotateArea.addEventListener('drop', e=>{
-            e.preventDefault(); rotateArea.classList.remove('drag-over');
-            const f = e.dataTransfer.files[0]; if(f) loadRotateFile(f);
-        });
-        rotateInput.addEventListener('change', e=>{ if(e.target.files[0]) loadRotateFile(e.target.files[0]); rotateInput.value=''; });
 
-        rotateBtn.addEventListener('click', async ()=>{
-            if(!state.rotateFile) return;
-            const rangeStr = document.getElementById('rotate-range-input').value.trim();
-            const dir = document.querySelector('input[name="rotate-direction"]:checked').value;
-            const delta = dir==='left' ? 270 : 90;
-            rotateBtn.disabled = true; rotateStatus.textContent='旋转中...';
-            rotateProgress.style.display='block'; rotateBar.style.width='0%';
-            try{
-                const buf = await state.rotateFile.arrayBuffer();
-                const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
-                const total = pdf.getPageCount();
-                let indices;
-                if(rangeStr === ''){
-                    indices = Array.from({length: total}, (_,i)=>i);
+        rotateArea.addEventListener('click', function() { rotateInput.click(); });
+        rotateArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            rotateArea.classList.add('drag-over');
+        });
+        rotateArea.addEventListener('dragleave', function() {
+            rotateArea.classList.remove('drag-over');
+        });
+        rotateArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            rotateArea.classList.remove('drag-over');
+            var f = e.dataTransfer.files[0];
+            if (f) loadRotateFile(f);
+        });
+        rotateInput.addEventListener('change', function(e) {
+            if (e.target.files[0]) loadRotateFile(e.target.files[0]);
+            rotateInput.value = '';
+        });
+
+        rotateBtn.addEventListener('click', async function() {
+            if (!state.rotateFile) return;
+            var rangeStr = document.getElementById('rotate-range-input').value.trim();
+            var dir = document.querySelector('input[name="rotate-direction"]:checked').value;
+            var delta = dir === 'left' ? 270 : 90;
+            rotateBtn.disabled = true;
+            rotateStatus.textContent = '旋转中...';
+            rotateProgress.style.display = 'block';
+            rotateBar.style.width = '0%';
+            try {
+                var arrayBuffer = await fileToArrayBuffer(state.rotateFile);
+                var pdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                var total = pdf.getPageCount();
+                var indices;
+                if (rangeStr === '') {
+                    indices = [];
+                    for (var i = 0; i < total; i++) indices.push(i);
                 } else {
                     indices = parsePageRanges(rangeStr, total);
-                    if(indices.length===0) throw new Error('未选中任何页面');
+                    if (indices.length === 0) throw new Error('未选中任何页面');
                 }
-                for(const idx of indices){
-                    const page = pdf.getPage(idx);
-                    const cur = page.getRotation().angle;
-                    let newAngle = (cur + delta) % 360;
+                for (var i = 0; i < indices.length; i++) {
+                    var idx = indices[i];
+                    var page = pdf.getPage(idx);
+                    var cur = page.getRotation().angle;
+                    var newAngle = (cur + delta) % 360;
                     newAngle = Math.round(newAngle);
-                    if (![0,90,180,270].includes(newAngle)) newAngle = 0;
+                    if ([0, 90, 180, 270].indexOf(newAngle) === -1) newAngle = 0;
                     page.setRotation(PDFLib.degrees(newAngle));
                 }
-                const bytes = await pdf.save();
-                const base = state.rotateFile.name.replace(/\.pdf$/i,'');
-                downloadBlob(new Blob([bytes],{type:'application/pdf'}), `${base}_rotated.pdf`);
-                rotateStatus.textContent = `✅ 已旋转 ${indices.length} 页`;
-            }catch(e){ rotateStatus.textContent='❌ '+e.message; }
-            finally{ rotateBtn.disabled=false; rotateProgress.style.display='none'; }
+                var bytes = await pdf.save();
+                var base = state.rotateFile.name.replace(/\.pdf$/i, '');
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_rotated.pdf');
+                rotateStatus.textContent = '✅ 已旋转 ' + indices.length + ' 页';
+            } catch(e) {
+                rotateStatus.textContent = '❌ ' + e.message;
+            } finally {
+                rotateBtn.disabled = false;
+                rotateProgress.style.display = 'none';
+            }
         });
 
         // ---------- 4. 删除页面 ----------
-        const deleteArea = document.getElementById('delete-upload-area');
-        const deleteInput = document.getElementById('delete-file-input');
-        const deleteInfo = document.getElementById('delete-file-info');
-        const deleteName = document.getElementById('delete-file-name');
-        const deletePagesSpan = document.getElementById('delete-file-pages');
-        const deleteBtn = document.getElementById('delete-btn');
-        const deleteStatus = document.getElementById('delete-status');
-        const deleteProgress = document.getElementById('delete-progress');
-        const deleteBar = deleteProgress.querySelector('.progress-bar');
+        var deleteArea = document.getElementById('delete-upload-area');
+        var deleteInput = document.getElementById('delete-file-input');
+        var deleteInfo = document.getElementById('delete-file-info');
+        var deleteName = document.getElementById('delete-file-name');
+        var deletePagesSpan = document.getElementById('delete-file-pages');
+        var deleteBtn = document.getElementById('delete-btn');
+        var deleteStatus = document.getElementById('delete-status');
+        var deleteProgress = document.getElementById('delete-progress');
+        var deleteBar = deleteProgress.querySelector('.progress-bar');
 
         async function loadDeleteFile(file) {
-            if(file.type!=='application/pdf') return;
-            deleteStatus.textContent='读取中...'; deleteProgress.style.display='block'; deleteBar.style.width='0%';
-            try{
-                const pages = await getPdfPageCount(file);
-                state.deleteFile = file; state.deletePageCount = pages;
+            if (file.type !== 'application/pdf') return;
+            deleteStatus.textContent = '读取中...';
+            deleteProgress.style.display = 'block';
+            deleteBar.style.width = '0%';
+            try {
+                var pages = await getPdfPageCount(file);
+                state.deleteFile = file;
+                state.deletePageCount = pages;
                 deleteName.textContent = file.name;
-                deletePagesSpan.textContent = `${pages} 页 · ${formatFileSize(file.size)}`;
+                deletePagesSpan.textContent = pages + ' 页 · ' + formatFileSize(file.size);
                 deleteInfo.style.display = 'flex';
                 deleteBtn.disabled = false;
                 deleteStatus.textContent = '';
-            }catch(e){ deleteStatus.textContent='❌ 读取失败'; }
-            finally{ deleteProgress.style.display='none'; }
+            } catch(e) {
+                deleteStatus.textContent = '❌ 读取失败';
+            } finally {
+                deleteProgress.style.display = 'none';
+            }
         }
-        deleteArea.addEventListener('click', ()=>deleteInput.click());
-        deleteArea.addEventListener('dragover', e=>{ e.preventDefault(); deleteArea.classList.add('drag-over'); });
-        deleteArea.addEventListener('dragleave', ()=>deleteArea.classList.remove('drag-over'));
-        deleteArea.addEventListener('drop', e=>{
-            e.preventDefault(); deleteArea.classList.remove('drag-over');
-            const f = e.dataTransfer.files[0]; if(f) loadDeleteFile(f);
-        });
-        deleteInput.addEventListener('change', e=>{ if(e.target.files[0]) loadDeleteFile(e.target.files[0]); deleteInput.value=''; });
 
-        deleteBtn.addEventListener('click', async ()=>{
-            if(!state.deleteFile) return;
-            const rangeStr = document.getElementById('delete-range-input').value.trim();
-            if(!rangeStr) { alert('请输入要删除的页码'); return; }
-            deleteBtn.disabled = true; deleteStatus.textContent='删除中...';
-            deleteProgress.style.display='block'; deleteBar.style.width='0%';
-            try{
-                const buf = await state.deleteFile.arrayBuffer();
-                const srcPdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
-                const total = srcPdf.getPageCount();
-                const toDelete = parsePageRanges(rangeStr, total);
-                if(toDelete.length===0) throw new Error('未选中有效页面');
-                const keepIndices = [];
-                for(let i=0; i<total; i++) if(!toDelete.includes(i)) keepIndices.push(i);
-                if(keepIndices.length===0) throw new Error('删除后无剩余页面');
-                const newPdf = await PDFLib.PDFDocument.create();
-                const pages = await newPdf.copyPages(srcPdf, keepIndices);
-                pages.forEach(p=>newPdf.addPage(p));
-                const bytes = await newPdf.save();
-                const base = state.deleteFile.name.replace(/\.pdf$/i,'');
-                downloadBlob(new Blob([bytes],{type:'application/pdf'}), `${base}_deleted.pdf`);
-                deleteStatus.textContent = `✅ 已删除 ${toDelete.length} 页`;
-            }catch(e){ deleteStatus.textContent='❌ '+e.message; }
-            finally{ deleteBtn.disabled=false; deleteProgress.style.display='none'; }
+        deleteArea.addEventListener('click', function() { deleteInput.click(); });
+        deleteArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            deleteArea.classList.add('drag-over');
+        });
+        deleteArea.addEventListener('dragleave', function() {
+            deleteArea.classList.remove('drag-over');
+        });
+        deleteArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            deleteArea.classList.remove('drag-over');
+            var f = e.dataTransfer.files[0];
+            if (f) loadDeleteFile(f);
+        });
+        deleteInput.addEventListener('change', function(e) {
+            if (e.target.files[0]) loadDeleteFile(e.target.files[0]);
+            deleteInput.value = '';
         });
 
+        deleteBtn.addEventListener('click', async function() {
+            if (!state.deleteFile) return;
+            var rangeStr = document.getElementById('delete-range-input').value.trim();
+            if (!rangeStr) {
+                alert('请输入要删除的页码');
+                return;
+            }
+            deleteBtn.disabled = true;
+            deleteStatus.textContent = '删除中...';
+            deleteProgress.style.display = 'block';
+            deleteBar.style.width = '0%';
+            try {
+                var arrayBuffer = await fileToArrayBuffer(state.deleteFile);
+                var srcPdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                var total = srcPdf.getPageCount();
+                var toDelete = parsePageRanges(rangeStr, total);
+                if (toDelete.length === 0) throw new Error('未选中有效页面');
+                var keepIndices = [];
+                for (var i = 0; i < total; i++) {
+                    if (toDelete.indexOf(i) === -1) keepIndices.push(i);
+                }
+                if (keepIndices.length === 0) throw new Error('删除后无剩余页面');
+                var newPdf = await PDFLib.PDFDocument.create();
+                var pages = await newPdf.copyPages(srcPdf, keepIndices);
+                pages.forEach(function(p) { newPdf.addPage(p); });
+                var bytes = await newPdf.save();
+                var base = state.deleteFile.name.replace(/\.pdf$/i, '');
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_deleted.pdf');
+                deleteStatus.textContent = '✅ 已删除 ' + toDelete.length + ' 页';
+            } catch(e) {
+                deleteStatus.textContent = '❌ ' + e.message;
+            } finally {
+                deleteBtn.disabled = false;
+                deleteProgress.style.display = 'none';
+            }
+        });
+
+        // 初始化
         renderMergeList();
     })();
 </script>
