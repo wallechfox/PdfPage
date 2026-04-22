@@ -75,6 +75,7 @@
             font-size: 13px; color: #475569; border-left: 4px solid #2563eb;
         }
         .explanation-box strong { color: #1e293b; }
+        .split-extra-actions { display: flex; gap: 12px; margin-top: 8px; }
         @media (max-width: 640px) {
             body { padding: 16px 12px; }
             .card { padding: 18px; }
@@ -108,7 +109,7 @@
         <div class="progress" id="merge-progress"><div class="progress-bar"></div></div>
     </div>
 
-    <!-- 卡片2: 拆分 PDF -->
+    <!-- 卡片2: 拆分 PDF（含奇偶拆分） -->
     <div class="card">
         <div class="card-header"><span class="card-icon">✂️</span><h2>拆分 PDF</h2></div>
         <div class="upload-area" id="split-upload-area">
@@ -126,9 +127,11 @@
                 <label><input type="radio" name="split-mode" value="range" checked> 📄 页码范围</label>
                 <label><input type="radio" name="split-mode" value="fixed"> 🔢 固定页数</label>
                 <label><input type="radio" name="split-mode" value="single"> 📃 全部单页</label>
+                <label><input type="radio" name="split-mode" value="odd_even"> 🔀 奇偶拆分</label>
             </div>
         </div>
         <div id="split-mode-config" style="margin:8px 0 0 116px;"></div>
+        <div id="split-extra-buttons" class="split-extra-actions" style="margin-left:116px;"></div>
         <div class="explanation-box" id="split-explanation"></div>
         <div class="action-bar">
             <button class="btn btn-primary" id="split-btn" disabled>拆分并下载</button>
@@ -219,21 +222,15 @@
     (function(){
         var PDFLib = window.PDFLib;
 
-        // ---------- 兼容性：通用文件转 ArrayBuffer (替代 file.arrayBuffer) ----------
+        // ---------- 兼容性：通用文件转 ArrayBuffer ----------
         function fileToArrayBuffer(file) {
-            // 如果浏览器支持现代方法，直接使用
             if (typeof file.arrayBuffer === 'function') {
                 return file.arrayBuffer();
             }
-            // 降级使用 FileReader (兼容 IE10+, Chrome 76- 等)
             return new Promise(function(resolve, reject) {
                 var reader = new FileReader();
-                reader.onload = function(e) {
-                    resolve(e.target.result);
-                };
-                reader.onerror = function(e) {
-                    reject(new Error('文件读取失败'));
-                };
+                reader.onload = function(e) { resolve(e.target.result); };
+                reader.onerror = function(e) { reject(new Error('文件读取失败')); };
                 reader.readAsArrayBuffer(file);
             });
         }
@@ -255,7 +252,6 @@
             return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
 
-        // 通用页面范围解析 (返回0-based索引数组)
         function parsePageRanges(input, maxPage) {
             if (!input.trim()) return [];
             var pagesSet = new Set();
@@ -266,14 +262,10 @@
                     var rangeParts = part.split('-').map(Number);
                     var start = Math.max(1, rangeParts[0]);
                     var end = Math.min(rangeParts[1], maxPage);
-                    for (var p = start; p <= end; p++) {
-                        pagesSet.add(p);
-                    }
+                    for (var p = start; p <= end; p++) pagesSet.add(p);
                 } else {
                     var n = parseInt(part, 10);
-                    if (n >= 1 && n <= maxPage) {
-                        pagesSet.add(n);
-                    }
+                    if (n >= 1 && n <= maxPage) pagesSet.add(n);
                 }
             }
             var sorted = Array.from(pagesSet).sort(function(a, b) { return a - b; });
@@ -333,7 +325,6 @@
             mergeList.innerHTML = html;
             mergeBtn.disabled = state.mergeFiles.length < 2;
 
-            // 绑定移除事件
             var removeBtns = document.querySelectorAll('.remove-file');
             for (var i = 0; i < removeBtns.length; i++) {
                 removeBtns[i].addEventListener('click', function(e) {
@@ -345,7 +336,6 @@
                 });
             }
 
-            // 拖拽排序
             var items = document.querySelectorAll('.file-item');
             var dragSrc = null;
             for (var i = 0; i < items.length; i++) {
@@ -357,20 +347,14 @@
                 });
                 item.addEventListener('dragend', function() {
                     this.classList.remove('dragging');
-                    for (var j = 0; j < items.length; j++) {
-                        items[j].classList.remove('drag-over');
-                    }
+                    for (var j = 0; j < items.length; j++) items[j].classList.remove('drag-over');
                     dragSrc = null;
                 });
                 item.addEventListener('dragover', function(e) {
                     e.preventDefault();
-                    if (this !== dragSrc) {
-                        this.classList.add('drag-over');
-                    }
+                    if (this !== dragSrc) this.classList.add('drag-over');
                 });
-                item.addEventListener('dragleave', function() {
-                    this.classList.remove('drag-over');
-                });
+                item.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
                 item.addEventListener('drop', function(e) {
                     e.preventDefault();
                     this.classList.remove('drag-over');
@@ -399,16 +383,8 @@
                 if (f.type !== 'application/pdf') continue;
                 try {
                     var pages = await getPdfPageCount(f);
-                    newFiles.push({
-                        id: genId(),
-                        file: f,
-                        name: f.name,
-                        size: f.size,
-                        pages: pages
-                    });
-                } catch(e) {
-                    console.warn(e);
-                }
+                    newFiles.push({ id: genId(), file: f, name: f.name, size: f.size, pages: pages });
+                } catch(e) { console.warn(e); }
                 mergeBar.style.width = ((i + 1) / files.length * 100) + '%';
             }
             state.mergeFiles = state.mergeFiles.concat(newFiles);
@@ -418,13 +394,8 @@
         }
 
         mergeArea.addEventListener('click', function() { mergeInput.click(); });
-        mergeArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            mergeArea.classList.add('drag-over');
-        });
-        mergeArea.addEventListener('dragleave', function() {
-            mergeArea.classList.remove('drag-over');
-        });
+        mergeArea.addEventListener('dragover', function(e) { e.preventDefault(); mergeArea.classList.add('drag-over'); });
+        mergeArea.addEventListener('dragleave', function() { mergeArea.classList.remove('drag-over'); });
         mergeArea.addEventListener('drop', function(e) {
             e.preventDefault();
             mergeArea.classList.remove('drag-over');
@@ -432,9 +403,7 @@
             if (files.length) addMergeFiles(files);
         });
         mergeInput.addEventListener('change', function(e) {
-            if (e.target.files.length) {
-                addMergeFiles(Array.from(e.target.files));
-            }
+            if (e.target.files.length) addMergeFiles(Array.from(e.target.files));
             mergeInput.value = '';
         });
         clearMergeBtn.addEventListener('click', function() {
@@ -459,23 +428,20 @@
                     mergeBar.style.width = ((i + 1) / state.mergeFiles.length * 100) + '%';
                 }
                 var bytes = await merged.save();
-                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), 'merged.pdf');
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), '合并.pdf');
                 mergeStatus.textContent = '✅ 合并完成';
-            } catch(e) {
-                mergeStatus.textContent = '❌ 失败: ' + e.message;
-            } finally {
-                mergeBtn.disabled = false;
-                mergeProgress.style.display = 'none';
-            }
+            } catch(e) { mergeStatus.textContent = '❌ 失败: ' + e.message; }
+            finally { mergeBtn.disabled = false; mergeProgress.style.display = 'none'; }
         });
 
-        // ---------- 2. 拆分功能 ----------
+        // ---------- 2. 拆分功能（含奇偶拆分）----------
         var splitArea = document.getElementById('split-upload-area');
         var splitInput = document.getElementById('split-file-input');
         var splitInfo = document.getElementById('split-file-info');
         var splitName = document.getElementById('split-file-name');
         var splitPages = document.getElementById('split-file-pages');
         var splitModeConfig = document.getElementById('split-mode-config');
+        var splitExtraButtons = document.getElementById('split-extra-buttons');
         var splitBtn = document.getElementById('split-btn');
         var splitStatus = document.getElementById('split-status');
         var splitProgress = document.getElementById('split-progress');
@@ -485,30 +451,86 @@
 
         function updateSplitUI() {
             var mode = document.querySelector('input[name="split-mode"]:checked').value;
-            var html = '', expl = '';
+            var html = '', expl = '', extraHtml = '';
             if (mode === 'range') {
                 html = '<input type="text" id="range-input" placeholder="例: 1-3,5,7-9" style="width:100%; padding:10px; border-radius:12px; border:1px solid #cbd5e1;">';
                 expl = '<strong>📄 页码范围：</strong>输入要提取的页码，如 1-3,5,7-9。将合并为一个PDF。';
+                splitBtn.textContent = '拆分并下载';
+                splitBtn.style.display = 'inline-block';
+                extraHtml = '';
             } else if (mode === 'fixed') {
                 html = '<input type="number" id="fixed-pages" min="1" value="1" style="width:100px; padding:10px; border-radius:12px; border:1px solid #cbd5e1;"> <span style="margin-left:8px; color:#64748b;">每份页数</span>';
                 expl = '<strong>🔢 固定页数：</strong>每 N 页拆分为一个独立PDF，最后一份可能不足。';
-            } else {
+                splitBtn.textContent = '拆分并下载';
+                splitBtn.style.display = 'inline-block';
+                extraHtml = '';
+            } else if (mode === 'single') {
                 html = '<span style="color:#64748b;">将每一页拆分为独立PDF文件。</span>';
                 expl = '<strong>📃 全部单页：</strong>每一页生成一个单独PDF。';
+                splitBtn.textContent = '拆分并下载';
+                splitBtn.style.display = 'inline-block';
+                extraHtml = '';
+            } else if (mode === 'odd_even') {
+                html = '<span style="color:#64748b;">请选择抽取奇数页或偶数页。</span>';
+                expl = '<strong>🔀 奇偶拆分：</strong>分别抽取奇数页或偶数页生成新PDF。';
+                splitBtn.style.display = 'none';
+                extraHtml = '<button class="btn btn-secondary" id="extract-odd-btn">📂 抽取奇数页</button>' +
+                            '<button class="btn btn-secondary" id="extract-even-btn">📂 抽取偶数页</button>';
             }
             splitModeConfig.innerHTML = html;
             splitExplanation.innerHTML = expl;
+            splitExtraButtons.innerHTML = extraHtml;
+
+            if (mode === 'odd_even') {
+                var oddBtn = document.getElementById('extract-odd-btn');
+                var evenBtn = document.getElementById('extract-even-btn');
+                if (oddBtn) oddBtn.addEventListener('click', function() { extractOddEven(true); });
+                if (evenBtn) evenBtn.addEventListener('click', function() { extractOddEven(false); });
+            }
         }
+
+        async function extractOddEven(isOdd) {
+            if (!state.splitFile) { alert('请先上传PDF文件'); return; }
+            splitStatus.textContent = isOdd ? '抽取奇数页中...' : '抽取偶数页中...';
+            splitProgress.style.display = 'block';
+            splitBar.style.width = '0%';
+            try {
+                var arrayBuffer = await fileToArrayBuffer(state.splitFile);
+                var srcPdf = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                var total = srcPdf.getPageCount();
+                var indices = [];
+                for (var i = 0; i < total; i++) {
+                    var pageNum = i + 1;
+                    if (isOdd && pageNum % 2 === 1) indices.push(i);
+                    else if (!isOdd && pageNum % 2 === 0) indices.push(i);
+                }
+                if (indices.length === 0) {
+                    alert('没有符合条件的页面');
+                    splitStatus.textContent = '没有符合条件的页面';
+                    return;
+                }
+                var newPdf = await PDFLib.PDFDocument.create();
+                var pages = await newPdf.copyPages(srcPdf, indices);
+                pages.forEach(function(p) { newPdf.addPage(p); });
+                var bytes = await newPdf.save();
+                var base = state.splitFile.name.replace(/\.pdf$/i, '');
+                var suffix = isOdd ? '奇数页' : '偶数页';
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_' + suffix + '.pdf');
+                splitStatus.textContent = isOdd ? '✅ 奇数页已下载' : '✅ 偶数页已下载';
+            } catch(e) {
+                splitStatus.textContent = '❌ ' + e.message;
+            } finally {
+                splitProgress.style.display = 'none';
+            }
+        }
+
         for (var i = 0; i < modeRadios.length; i++) {
             modeRadios[i].addEventListener('change', updateSplitUI);
         }
         updateSplitUI();
 
         async function loadSplitFile(file) {
-            if (file.type !== 'application/pdf') {
-                alert('请选择PDF文件');
-                return;
-            }
+            if (file.type !== 'application/pdf') { alert('请选择PDF文件'); return; }
             splitStatus.textContent = '读取中...';
             splitProgress.style.display = 'block';
             splitBar.style.width = '0%';
@@ -521,21 +543,13 @@
                 splitInfo.style.display = 'flex';
                 splitBtn.disabled = false;
                 splitStatus.textContent = '';
-            } catch(e) {
-                splitStatus.textContent = '❌ 读取失败';
-            } finally {
-                splitProgress.style.display = 'none';
-            }
+            } catch(e) { splitStatus.textContent = '❌ 读取失败'; }
+            finally { splitProgress.style.display = 'none'; }
         }
 
         splitArea.addEventListener('click', function() { splitInput.click(); });
-        splitArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            splitArea.classList.add('drag-over');
-        });
-        splitArea.addEventListener('dragleave', function() {
-            splitArea.classList.remove('drag-over');
-        });
+        splitArea.addEventListener('dragover', function(e) { e.preventDefault(); splitArea.classList.add('drag-over'); });
+        splitArea.addEventListener('dragleave', function() { splitArea.classList.remove('drag-over'); });
         splitArea.addEventListener('drop', function(e) {
             e.preventDefault();
             splitArea.classList.remove('drag-over');
@@ -550,6 +564,7 @@
         splitBtn.addEventListener('click', async function() {
             if (!state.splitFile) return;
             var mode = document.querySelector('input[name="split-mode"]:checked').value;
+            if (mode === 'odd_even') return;
             splitBtn.disabled = true;
             splitStatus.textContent = '拆分中...';
             splitProgress.style.display = 'block';
@@ -574,7 +589,7 @@
                         for (var j = i; j < end; j++) arr.push(j);
                         ranges.push(arr);
                     }
-                } else {
+                } else if (mode === 'single') {
                     for (var i = 0; i < total; i++) ranges.push([i]);
                 }
                 for (var idx = 0; idx < ranges.length; idx++) {
@@ -583,22 +598,18 @@
                     var pages = await newPdf.copyPages(srcPdf, indices);
                     pages.forEach(function(p) { newPdf.addPage(p); });
                     var bytes = await newPdf.save();
-                    var suffix = '';
-                    if (mode === 'range') suffix = 'selected';
-                    else if (mode === 'fixed') suffix = 'part' + (idx + 1);
-                    else suffix = 'page' + (indices[0] + 1);
                     var base = state.splitFile.name.replace(/\.pdf$/i, '');
+                    var suffix = '';
+                    if (mode === 'range') suffix = '提取页';
+                    else if (mode === 'fixed') suffix = '第' + (idx + 1) + '部分';
+                    else suffix = '第' + (indices[0] + 1) + '页';
                     downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_' + suffix + '.pdf');
                     splitBar.style.width = ((idx + 1) / ranges.length * 100) + '%';
                     await new Promise(function(r) { setTimeout(r, 80); });
                 }
                 splitStatus.textContent = '✅ 完成，' + ranges.length + '个文件';
-            } catch(e) {
-                splitStatus.textContent = '❌ ' + e.message;
-            } finally {
-                splitBtn.disabled = false;
-                splitProgress.style.display = 'none';
-            }
+            } catch(e) { splitStatus.textContent = '❌ ' + e.message; }
+            finally { splitBtn.disabled = false; splitProgress.style.display = 'none'; }
         });
 
         // ---------- 3. 旋转功能 ----------
@@ -626,21 +637,13 @@
                 rotateInfo.style.display = 'flex';
                 rotateBtn.disabled = false;
                 rotateStatus.textContent = '';
-            } catch(e) {
-                rotateStatus.textContent = '❌ 读取失败';
-            } finally {
-                rotateProgress.style.display = 'none';
-            }
+            } catch(e) { rotateStatus.textContent = '❌ 读取失败'; }
+            finally { rotateProgress.style.display = 'none'; }
         }
 
         rotateArea.addEventListener('click', function() { rotateInput.click(); });
-        rotateArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            rotateArea.classList.add('drag-over');
-        });
-        rotateArea.addEventListener('dragleave', function() {
-            rotateArea.classList.remove('drag-over');
-        });
+        rotateArea.addEventListener('dragover', function(e) { e.preventDefault(); rotateArea.classList.add('drag-over'); });
+        rotateArea.addEventListener('dragleave', function() { rotateArea.classList.remove('drag-over'); });
         rotateArea.addEventListener('drop', function(e) {
             e.preventDefault();
             rotateArea.classList.remove('drag-over');
@@ -684,14 +687,10 @@
                 }
                 var bytes = await pdf.save();
                 var base = state.rotateFile.name.replace(/\.pdf$/i, '');
-                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_rotated.pdf');
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_已旋转.pdf');
                 rotateStatus.textContent = '✅ 已旋转 ' + indices.length + ' 页';
-            } catch(e) {
-                rotateStatus.textContent = '❌ ' + e.message;
-            } finally {
-                rotateBtn.disabled = false;
-                rotateProgress.style.display = 'none';
-            }
+            } catch(e) { rotateStatus.textContent = '❌ ' + e.message; }
+            finally { rotateBtn.disabled = false; rotateProgress.style.display = 'none'; }
         });
 
         // ---------- 4. 删除页面 ----------
@@ -719,21 +718,13 @@
                 deleteInfo.style.display = 'flex';
                 deleteBtn.disabled = false;
                 deleteStatus.textContent = '';
-            } catch(e) {
-                deleteStatus.textContent = '❌ 读取失败';
-            } finally {
-                deleteProgress.style.display = 'none';
-            }
+            } catch(e) { deleteStatus.textContent = '❌ 读取失败'; }
+            finally { deleteProgress.style.display = 'none'; }
         }
 
         deleteArea.addEventListener('click', function() { deleteInput.click(); });
-        deleteArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            deleteArea.classList.add('drag-over');
-        });
-        deleteArea.addEventListener('dragleave', function() {
-            deleteArea.classList.remove('drag-over');
-        });
+        deleteArea.addEventListener('dragover', function(e) { e.preventDefault(); deleteArea.classList.add('drag-over'); });
+        deleteArea.addEventListener('dragleave', function() { deleteArea.classList.remove('drag-over'); });
         deleteArea.addEventListener('drop', function(e) {
             e.preventDefault();
             deleteArea.classList.remove('drag-over');
@@ -748,10 +739,7 @@
         deleteBtn.addEventListener('click', async function() {
             if (!state.deleteFile) return;
             var rangeStr = document.getElementById('delete-range-input').value.trim();
-            if (!rangeStr) {
-                alert('请输入要删除的页码');
-                return;
-            }
+            if (!rangeStr) { alert('请输入要删除的页码'); return; }
             deleteBtn.disabled = true;
             deleteStatus.textContent = '删除中...';
             deleteProgress.style.display = 'block';
@@ -772,17 +760,13 @@
                 pages.forEach(function(p) { newPdf.addPage(p); });
                 var bytes = await newPdf.save();
                 var base = state.deleteFile.name.replace(/\.pdf$/i, '');
-                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_deleted.pdf');
+                downloadBlob(new Blob([bytes], { type: 'application/pdf' }), base + '_已删除.pdf');
                 deleteStatus.textContent = '✅ 已删除 ' + toDelete.length + ' 页';
-            } catch(e) {
-                deleteStatus.textContent = '❌ ' + e.message;
-            } finally {
-                deleteBtn.disabled = false;
-                deleteProgress.style.display = 'none';
-            }
+            } catch(e) { deleteStatus.textContent = '❌ ' + e.message; }
+            finally { deleteBtn.disabled = false; deleteProgress.style.display = 'none'; }
         });
 
-        // 初始化
+        // 初始化合并列表
         renderMergeList();
     })();
 </script>
