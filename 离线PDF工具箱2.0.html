@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>离线PDF工具箱 · 全功能版</title>
+    <script src="./pdf.min.js"></script>
+    <script src="./pdf-lib.min.js"></script>
+    <script src="./jszip.min.js"></script>
+    <style>
+        :root {
+            --bg: #f1f5f9;
+            --card-bg: #ffffff;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #eff6ff;
+            --text: #0f172a;
+            --text-secondary: #475569;
+            --border: #e2e8f0;
+            --danger: #dc2626;
+            --success: #16a34a;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+            --shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.02);
+            --radius-sm: 12px;
+            --radius: 16px;
+            --radius-lg: 24px;
+            --transition: 0.2s ease;
+            --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.5; }
+        .header { background:var(--card-bg); border-bottom:1px solid var(--border); padding:0 24px; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm); }
+        .header-inner { max-width:1300px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:60px; flex-wrap:wrap; gap:8px; }
+        .logo { font-weight:700; font-size:1.3rem; color:var(--text); white-space:nowrap; }
+        .tab-nav { display:flex; gap:4px; background:#f1f5f9; border-radius:28px; padding:4px; flex-wrap:wrap; }
+        .tab-btn { padding:8px 16px; border-radius:24px; border:none; cursor:pointer; font-size:0.85rem; font-weight:500; background:transparent; color:var(--text-secondary); transition:var(--transition); white-space:nowrap; font-family:var(--font); }
+        .tab-btn.active { background:#fff; color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,0.06); font-weight:600; }
+        .tab-btn:hover:not(.active) { color:var(--text); background:rgba(255,255,255,0.6); }
+        .main-container { max-width:1300px; margin:0 auto; padding:24px; }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+        .card { background:var(--card-bg); border-radius:var(--radius-lg); padding:24px; box-shadow:var(--shadow); margin-bottom:20px; border:1px solid var(--border); }
+        .card-title { font-size:1.1rem; font-weight:600; margin-bottom:18px; display:flex; align-items:center; gap:10px; color:var(--text); border-bottom:1px solid #eef2f6; padding-bottom:14px; }
+        .card-title .icon-dot { width:10px; height:10px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+        .split-layout { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+        .split-left { flex:1 1 280px; min-width:240px; display:flex; flex-direction:column; gap:12px; }
+        .split-right { flex:1 1 340px; min-width:240px; display:flex; flex-direction:column; gap:12px; }
+        .upload-area { border:2px dashed #cbd5e1; border-radius:var(--radius); padding:20px 16px; text-align:center; cursor:pointer; transition:var(--transition); background:#fafbfc; position:relative; user-select:none; }
+        .upload-area.drag-over { border-color:var(--primary); background:var(--primary-light); }
+        .upload-area .primary-text { font-weight:500; color:var(--text); }
+        .upload-area .secondary-text { font-size:0.8rem; color:var(--text-secondary); margin-top:6px; }
+        .upload-area input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+        .file-list { border:1px solid var(--border); border-radius:var(--radius-sm); background:#fff; }
+        .file-item { display:flex; align-items:center; padding:12px 16px; border-bottom:1px solid #f1f5f9; cursor:grab; }
+        .file-item:last-child { border-bottom:none; }
+        .file-item.dragging { opacity:0.5; background:#f8fafc; }
+        .file-item.drag-over { background:#e6f0ff; }
+        .drag-handle { margin-right:12px; color:#94a3b8; font-size:18px; cursor:grab; }
+        .file-info { flex:1; display:flex; align-items:center; gap:10px; }
+        .file-name { font-weight:500; word-break:break-word; }
+        .file-pages, .file-size { font-size:0.75rem; background:#f1f5f9; padding:2px 8px; border-radius:20px; }
+        .remove-file { background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; padding:4px 8px; border-radius:6px; }
+        .remove-file:hover { background:#fee2e2; color:#dc2626; }
+        .empty-message { text-align:center; padding:28px; color:#94a3b8; }
+        .config-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0 4px; }
+        .config-label { font-weight:500; color:var(--text-secondary); display:flex; align-items:center; gap:8px; }
+        .config-input { padding:10px 14px; border:1px solid #cbd5e1; border-radius:12px; font-size:0.9rem; font-family:var(--font); }
+        .config-hint { font-size:0.8rem; color:var(--text-secondary); }
+        .radio-group { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+        .radio-group label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+        .action-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .btn { display:inline-flex; align-items:center; gap:5px; padding:10px 20px; border-radius:40px; font-weight:500; font-size:0.85rem; border:none; cursor:pointer; transition:var(--transition); font-family:var(--font); background:#fff; border:1px solid #cbd5e1; color:var(--text); }
+        .btn-primary { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 4px 10px rgba(37,99,235,0.2); }
+        .btn-primary:hover:not(:disabled) { background:var(--primary-hover); }
+        .btn-danger { background:#fff; color:var(--danger); border:1px solid var(--danger); }
+        .btn-danger:hover:not(:disabled) { background:#fee2e2; }
+        .btn-sm { padding:6px 14px; font-size:0.8rem; }
+        .btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .status { font-size:0.85rem; color:var(--text-secondary); }
+        .progress { width:100%; height:6px; background:#e2e8f0; border-radius:3px; margin-top:12px; overflow:hidden; display:none; }
+        .progress-bar { height:100%; background:var(--primary); width:0%; transition:width 0.3s; }
+        .preview-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:12px; margin-top:16px; }
+        .preview-item { position:relative; border-radius:var(--radius-sm); overflow:hidden; background:#fff; border:2px solid var(--border); box-shadow:var(--shadow-sm); cursor:grab; aspect-ratio:0.72; display:flex; flex-direction:column; }
+        .preview-item:hover { border-color:#b0b8e0; }
+        .preview-item.dragging { opacity:0.45; border-style:dashed; border-color:var(--primary); }
+        .checkbox-wrap { position:absolute; top:6px; left:6px; z-index:5; background:rgba(255,255,255,0.85); border-radius:4px; padding:2px; }
+        .checkbox-wrap input { width:16px; height:16px; cursor:pointer; accent-color:var(--primary); }
+        .page-thumb { width:100%; flex:1; object-fit:contain; background:#fafafa; }
+        .page-info { padding:6px 8px; font-size:0.7rem; color:var(--text-secondary); text-align:center; background:#fafbfc; }
+        .action-btns { position:absolute; top:6px; right:6px; display:flex; gap:3px; opacity:0; transition:var(--transition); }
+        .preview-item:hover .action-btns { opacity:1; }
+        .btn-icon-download { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.95); border:1px solid var(--border); cursor:pointer; font-size:0.75rem; display:flex; align-items:center; justify-content:center; color:var(--primary); }
+        .btn-icon-download:hover { background:var(--primary); color:#fff; }
+        .footer-note { text-align:center; padding:20px; color:var(--text-secondary); font-size:0.85rem; }
+        .rotate-desc { font-size:0.8rem; color:var(--text-secondary); margin-left:8px; }
+        .usage-note { font-size:0.8rem; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
+        .scale-hint { font-size:0.8rem; color:var(--text-secondary); margin-left:8px; white-space:nowrap; }
+        @media (max-width:768px) {
+            .split-layout { flex-direction:column; }
+            .split-left, .split-right { flex:1 1 auto; }
+            .config-row { flex-direction:column; align-items:flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">📦 离线PDF工具箱</div>
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="tab-merge">🔗 合并</button>
+                <button class="tab-btn" data-tab="tab-split">✂️ 拆分</button>
+                <button class="tab-btn" data-tab="tab-rotate">🔄 旋转</button>
+                <button class="tab-btn" data-tab="tab-delete">🗑️ 删除</button>
+                <button class="tab-btn" data-tab="tab-convert">🖼️ PDF转图片</button>
+                <button class="tab-btn" data-tab="tab-img2pdf">🧩 图片转PDF</button>
+                <button class="tab-btn" data-tab="tab-manage">📑 页面重排</button>
+            </nav>
+        </div>
+    </header>
+    <div class="main-container">
+        <!-- 合并 PDF -->
+        <div class="tab-panel active" id="tab-merge">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>合并 PDF</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="merge-upload-area">
+                            <div class="primary-text">📁 点击或拖拽上传多个 PDF</div>
+                            <div class="secondary-text">上传后可拖拽调整顺序</div>
+                            <input type="file" id="merge-file-input" accept=".pdf" multiple>
+                        </div>
+                        <div id="merge-file-list" class="file-list"><div class="empty-message">暂无文件，请上传</div></div>
+                        <button class="btn btn-sm" id="clear-merge-btn">清空列表</button>
+                    </div>
+                    <div class="split-right">
+                        <div class="action-bar"><button class="btn btn-primary" id="merge-btn" disabled>合并并下载</button><span class="status" id="merge-status"></span></div>
+                        <div class="progress" id="merge-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 拆分 PDF -->
+        <div class="tab-panel" id="tab-split">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>拆分 PDF</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="split-upload-area">
+                            <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
+                            <div class="secondary-text">仅支持单个文件</div>
+                            <input type="file" id="split-file-input" accept=".pdf">
+                        </div>
+                        <div id="split-file-info" style="display:none;"><span id="split-file-name" style="font-weight:500;"></span><span id="split-file-pages" style="margin-left:12px;color:var(--text-secondary);"></span></div>
+                    </div>
+                    <div class="split-right">
+                        <div class="config-row">
+                            <span class="config-label">拆分模式</span>
+                            <div class="radio-group" id="split-mode-group">
+                                <label><input type="radio" name="split-mode" value="range" checked> 页码范围</label>
+                                <label><input type="radio" name="split-mode" value="fixed"> 固定页数</label>
+                                <label><input type="radio" name="split-mode" value="single"> 全部单页</label>
+                                <label><input type="radio" name="split-mode" value="odd_even"> 奇偶拆分</label>
+                            </div>
+                        </div>
+                        <div id="split-mode-config"></div>
+                        <div id="split-extra-buttons" class="split-extra-actions"></div>
+                        <div class="explanation-box" id="split-explanation" style="margin-top:8px;"></div>
+                        <div class="action-bar"><button class="btn btn-primary" id="split-btn" disabled>拆分并下载</button><span class="status" id="split-status"></span></div>
+                        <div class="progress" id="split-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 旋转 PDF -->
+        <div class="tab-panel" id="tab-rotate">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>旋转页面</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="rotate-upload-area">
+                            <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
+                            <div class="secondary-text">选择页面并旋转</div>
+                            <input type="file" id="rotate-file-input" accept=".pdf">
+                        </div>
+                        <div id="rotate-file-info" style="display:none;"><span id="rotate-file-name" style="font-weight:500;"></span><span id="rotate-file-pages" style="margin-left:12px;color:var(--text-secondary);"></span></div>
+                        <div class="config-row" style="justify-content:space-between; align-items:center;">
+                            <span class="config-label">页码范围</span><input type="text" id="rotate-range-input" class="config-input" placeholder="例: 1-3,5" style="flex:1;"><span class="config-hint">留空表示全部</span>
+                            <button class="btn btn-primary" id="rotate-btn" disabled style="margin-left:auto;">旋转并下载</button>
+                        </div>
+                    </div>
+                    <div class="split-right">
+                        <div class="config-label">旋转方向</div>
+                        <div class="radio-group" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                            <label><input type="radio" name="rotate-direction" value="left" checked> ↪️ 向左旋转90°</label>
+                            <label><input type="radio" name="rotate-direction" value="right"> ↩️ 向右旋转90°</label>
+                            <label><input type="radio" name="rotate-direction" value="180"> 🔃 旋转180°</label>
+                        </div>
+                        <span class="status" id="rotate-status"></span><div class="progress" id="rotate-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 删除页面 -->
+        <div class="tab-panel" id="tab-delete">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>删除页面</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="delete-upload-area">
+                            <div class="primary-text">📁 点击或拖拽上传一个 PDF</div>
+                            <div class="secondary-text">删除指定页面</div>
+                            <input type="file" id="delete-file-input" accept=".pdf">
+                        </div>
+                        <div id="delete-file-info" style="display:none;"><span id="delete-file-name" style="font-weight:500;"></span><span id="delete-file-pages" style="margin-left:12px;color:var(--text-secondary);"></span></div>
+                    </div>
+                    <div class="split-right">
+                        <div class="config-row" style="align-items:center;">
+                            <span class="config-label">删除页面 <span class="config-hint" style="margin-left:4px;">（例: 2,4,6-8）</span></span>
+                            <input type="text" id="delete-range-input" class="config-input" placeholder="必填" style="flex:1;">
+                            <button class="btn btn-danger" id="delete-btn" disabled>删除所选页面并下载</button>
+                        </div>
+                        <span class="status" id="delete-status"></span><div class="progress" id="delete-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- PDF 转图片 -->
+        <div class="tab-panel" id="tab-convert">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>PDF 转图片</div>
+                <div class="usage-note" style="margin-bottom:12px;">💡 提示：若PDF页数多或文件较大，预览可能消耗性能。建议先用<strong>【拆分】</strong>功能提取所需页面再转换。</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="convert-upload-area">
+                            <div class="primary-text">📁 点击或拖拽上传 PDF</div>
+                            <div class="secondary-text">完全前端处理</div>
+                            <input type="file" id="convert-file-input" accept=".pdf">
+                        </div>
+                        <div id="convert-file-info" style="display:none;"><span id="convert-file-name" style="font-weight:500;"></span><span id="convert-file-pages" style="margin-left:12px;color:var(--text-secondary);"></span></div>
+                    </div>
+                    <div class="split-right">
+                        <div class="config-row">
+                            <span class="config-label">格式</span><select id="img-format" style="padding:10px;border-radius:12px;border:1px solid #cbd5e1;"><option value="jpeg">JPEG</option><option value="png">PNG</option></select>
+                            <span class="config-label">质量</span><input type="range" id="img-quality" min="10" max="100" value="100" style="width:80px;"><span id="quality-value" style="font-weight:600;">100%</span>
+                            <span class="config-label">分辨率</span><select id="img-scale" style="padding:10px;border-radius:12px;border:1px solid #cbd5e1;"><option value="1">1× (72 DPI)</option><option value="2" selected>2× (144 DPI)</option><option value="3">3× (216 DPI)</option><option value="4">4×  (288 DPI)</option><option value="5">5× (360 DPI)</option></select>
+                            <span class="scale-hint">💡 建议：2× 适合屏幕查看，3× 适于打印，5× 仅用于高清需求</span>
+                        </div>
+                        <div class="action-bar"><button class="btn btn-primary" id="convert-download-all">📦 批量下载ZIP</button><span class="status" id="convert-status"></span></div>
+                        <div class="progress" id="convert-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+                <div id="convert-preview-container" style="display:none; margin-top:20px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                        <span style="font-weight:500;">预览（共 <span id="convert-page-count">0</span> 页）</span>
+                        <span class="status" id="convert-preview-status"></span>
+                        <span style="font-size:0.8rem;color:var(--text-secondary); margin-left:auto;">💡 悬停页面点击右上角图标单张下载</span>
+                    </div>
+                    <div class="preview-grid" id="convert-preview-grid"></div>
+                </div>
+            </div>
+        </div>
+        <!-- 图片转PDF -->
+        <div class="tab-panel" id="tab-img2pdf">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>图片转 PDF</div>
+                <div class="split-layout">
+                    <div class="split-left">
+                        <div class="upload-area" id="img2pdf-upload-area">
+                            <div class="primary-text">🖼️ 点击或拖拽上传图片</div>
+                            <div class="secondary-text">支持 jpg/png/webp 等</div>
+                            <input type="file" id="img2pdf-file-input" accept="image/*" multiple>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center;"><button class="btn btn-sm" id="img2pdf-add-more">➕ 追加图片</button><span id="img2pdf-count-label" style="font-size:0.85rem;">已添加0张</span></div>
+                    </div>
+                    <div class="split-right">
+                        <div class="action-bar">
+                            <button class="btn btn-sm" id="img2pdf-sel-all">全选</button><button class="btn btn-sm" id="img2pdf-desel-all">取消全选</button>
+                            <button class="btn btn-sm btn-danger" id="img2pdf-del-sel">删除选中</button><button class="btn btn-primary" id="img2pdf-export">导出为PDF</button>
+                        </div>
+                        <span class="status" id="img2pdf-status"></span><div class="progress" id="img2pdf-progress"><div class="progress-bar"></div></div>
+                    </div>
+                </div>
+                <div id="img2pdf-preview-container" style="margin-top:20px;">
+                    <div class="preview-grid" id="img2pdf-preview-grid"></div>
+                    <div id="img2pdf-empty-hint" style="text-align:center;padding:28px;color:var(--text-secondary);">上传图片后显示</div>
+                </div>
+            </div>
+        </div>
+        <!-- 页面重排 -->
+        <div class="tab-panel" id="tab-manage">
+            <div class="card">
+                <div class="card-title"><span class="icon-dot"></span>页面重排</div>
+                <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                    <div class="upload-area" id="manage-upload-area" style="flex:1; min-width:200px;">
+                        <div class="primary-text">📁 上传 PDF</div>
+                        <div class="secondary-text">支持多个文件</div>
+                        <input type="file" id="manage-file-input" accept=".pdf" multiple>
+                    </div>
+                    <div id="manage-file-list-container" style="flex:2; min-width:250px; background:#f9fafe; border:1px solid var(--border); border-radius:12px; padding:10px; max-height:120px; overflow-y:auto;"><div style="color:var(--text-secondary); font-size:0.85rem;">尚未选择文件</div></div>
+                    <button class="btn btn-sm" id="manage-add-more" style="align-self:center;">➕ 追加 PDF</button>
+                </div>
+                <div id="manage-preview-container" style="margin-top:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+                        <span style="font-weight:500;">页面缩略图（拖拽排序，勾选后可删除）</span>
+                        <div class="action-bar">
+                            <button class="btn btn-sm" id="manage-add-blank">➕ 空白页</button><button class="btn btn-sm" id="manage-sel-all">全选</button>
+                            <button class="btn btn-sm" id="manage-desel-all">取消全选</button><button class="btn btn-sm btn-danger" id="manage-del-sel">删除选中</button>
+                            <button class="btn btn-primary" id="manage-export">导出为PDF</button>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
+                        <span class="shortcut-hint">⌨️ Ctrl+A 全选，Delete 删除选中</span>
+                        <span class="status" id="manage-status" style="margin-left:auto;"></span>
+                    </div>
+                    <div class="preview-grid" id="manage-preview-grid"></div>
+                    <div id="manage-empty-hint" style="text-align:center;padding:28px;color:var(--text-secondary);">上传PDF后显示</div>
+                </div>
+                <div class="progress" id="manage-progress"><div class="progress-bar"></div></div>
+            </div>
+        </div>
+    </div>
+    <div class="footer-note">🌐 所有操作均在本地完成，适用于各类操作系统，包括Windows、Linux、苹果macOS、安卓、IOS、麒麟等，只要能使用浏览器，就可以使用。</div>
+    <div class="loading-overlay" id="loading-overlay" style="display:none;">
+        <div style="display:flex;align-items:center;background:#fff;padding:20px 30px;border-radius:24px;box-shadow:0 12px 32px rgba(0,0,0,0.12);">
+            <div class="loading-spinner"></div><span id="loading-text" style="margin-left:12px;font-weight:500;">处理中...</span>
+        </div>
+    </div>
+    <script>
+    (function() {
+        if (!window.PDFLib || typeof pdfjsLib === 'undefined' || typeof JSZip === 'undefined') {
+            alert('缺少必需库文件，请确保 pdf.min.js, pdf-lib.min.js, jszip.min.js 在相同目录下'); return;
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+
+        document.addEventListener('click', function(e) { if (e.target.matches('input[type="file"]')) e.stopPropagation(); }, true);
+
+        const $ = s => document.querySelector(s);
+        const $$ = s => document.querySelectorAll(s);
+
+        function showLoading(txt='处理中...') { document.getElementById('loading-text').textContent = txt; document.getElementById('loading-overlay').style.display = 'flex'; }
+        function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
+        function downloadBlob(blob, name) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href=url; a.download=name;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+        }
+        function getBaseName(fn) { const i=fn.lastIndexOf('.'); return i>0?fn.substring(0,i):fn; }
+        function fileToArrayBuffer(file) {
+            if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+            return new Promise((resolve,reject)=>{
+                const r = new FileReader();
+                r.onload = e => resolve(e.target.result); r.onerror = e => reject(new Error('读取失败'));
+                r.readAsArrayBuffer(file);
+            });
+        }
+        async function getPdfPageCount(file) {
+            const buf = await fileToArrayBuffer(file);
+            const pdf = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+            return pdf.getPageCount();
+        }
+        function parsePageRanges(input, maxPage) {
+            if (!input.trim()) return [];
+            const pagesSet = new Set();
+            const parts = input.split(',').map(s=>s.trim());
+            parts.forEach(part => {
+                if (part.includes('-')) {
+                    const [start,end] = part.split('-').map(Number);
+                    for (let p = Math.max(1,start); p <= Math.min(end,maxPage); p++) pagesSet.add(p);
+                } else {
+                    const n = parseInt(part,10);
+                    if (n>=1 && n<=maxPage) pagesSet.add(n);
+                }
+            });
+            return Array.from(pagesSet).sort((a,b)=>a-b).map(p=>p-1);
+        }
+        function genId() { return Date.now()+'-'+Math.random().toString(36).substr(2,9); }
+
+        // Tab切换
+        $$('.tab-btn').forEach(btn => btn.addEventListener('click', function(){
+            const target = this.dataset.tab;
+            $$('.tab-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');
+            $$('.tab-panel').forEach(p=>p.classList.remove('active')); document.getElementById(target).classList.add('active');
+        }));
+
+        // ---------- 合并 ----------
+        (function(){
+            const state = { files: [] };
+            const area=$('#merge-upload-area'), input=$('#merge-file-input'), list=$('#merge-file-list'),
+                  btnMerge=$('#merge-btn'), clearBtn=$('#clear-merge-btn'), status=$('#merge-status'),
+                  progress=$('#merge-progress'), bar=progress.querySelector('.progress-bar');
+            function render() {
+                if (!state.files.length) { list.innerHTML = '<div class="empty-message">暂无文件，请上传</div>'; btnMerge.disabled = true; return; }
+                list.innerHTML = state.files.map(f => `
+                    <div class="file-item" draggable="true" data-id="${f.id}">
+                        <span class="drag-handle">☰</span><div class="file-info"><span class="file-name">${f.name}</span><span class="file-pages">${f.pages}页</span></div>
+                        <button class="remove-file" data-id="${f.id}">✕</button>
+                    </div>`).join('');
+                btnMerge.disabled = state.files.length < 2;
+                list.querySelectorAll('.remove-file').forEach(btn => btn.addEventListener('click', function(e){
+                    e.stopPropagation(); state.files = state.files.filter(f => f.id !== this.dataset.id); render();
+                    status.textContent = state.files.length ? `已添加 ${state.files.length} 个文件` : '';
+                }));
+                let dragSrc = null;
+                list.querySelectorAll('.file-item').forEach(item => {
+                    item.addEventListener('dragstart', function(e){ dragSrc = this; this.classList.add('dragging'); e.dataTransfer.setData('text/plain', this.dataset.id); });
+                    item.addEventListener('dragend', function(){ this.classList.remove('dragging'); dragSrc=null; });
+                    item.addEventListener('dragover', function(e){ e.preventDefault(); if(this!==dragSrc) this.classList.add('drag-over'); });
+                    item.addEventListener('dragleave', function(){ this.classList.remove('drag-over'); });
+                    item.addEventListener('drop', function(e){
+                        e.preventDefault(); this.classList.remove('drag-over');
+                        if(dragSrc && this!==dragSrc){
+                            const srcId = dragSrc.dataset.id, tgtId = this.dataset.id;
+                            const srcIdx = state.files.findIndex(f=>f.id===srcId), tgtIdx = state.files.findIndex(f=>f.id===tgtId);
+                            if(srcIdx!==-1 && tgtIdx!==-1){ const [moved] = state.files.splice(srcIdx,1); state.files.splice(tgtIdx,0,moved); render(); }
+                        }
+                    });
+                });
+            }
+            async function addFiles(files){
+                status.textContent = '读取页数...'; progress.style.display='block'; bar.style.width='0%';
+                const newFiles = [];
+                for(let i=0;i<files.length;i++){
+                    const f=files[i]; if(f.type!=='application/pdf') continue;
+                    try { const pages = await getPdfPageCount(f); newFiles.push({ id:genId(), file:f, name:f.name, pages }); } catch(e){}
+                    bar.style.width = ((i+1)/files.length*100)+'%';
+                }
+                state.files = state.files.concat(newFiles); render();
+                status.textContent = `已添加 ${state.files.length} 个文件`; progress.style.display='none';
+            }
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files.length) addFiles(Array.from(e.dataTransfer.files))});
+            input.addEventListener('change',e=>{ if(e.target.files.length) addFiles(Array.from(e.target.files)); input.value=''; });
+            clearBtn.addEventListener('click',()=>{ state.files=[]; render(); status.textContent=''; });
+            btnMerge.addEventListener('click', async ()=>{
+                if(state.files.length<2) return;
+                btnMerge.disabled=true; status.textContent='合并中...'; progress.style.display='block';
+                try{
+                    const merged = await PDFLib.PDFDocument.create();
+                    for(let i=0;i<state.files.length;i++){
+                        const f = state.files[i]; const buf = await fileToArrayBuffer(f.file);
+                        const pdf = await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+                        const pages = await merged.copyPages(pdf, pdf.getPageIndices());
+                        pages.forEach(p=>merged.addPage(p)); bar.style.width = ((i+1)/state.files.length*100)+'%';
+                    }
+                    const bytes = await merged.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),'合并.pdf');
+                    status.textContent='✅ 合并完成';
+                }catch(e){ status.textContent='❌ '+e.message; } finally{ btnMerge.disabled=false; progress.style.display='none'; }
+            });
+            render();
+        })();
+
+        // ---------- 拆分 ----------
+        (function(){
+            let splitFile=null, pageCount=0;
+            const area=$('#split-upload-area'), input=$('#split-file-input'), info=$('#split-file-info'),
+                  name=$('#split-file-name'), pagesSpan=$('#split-file-pages'), btn=$('#split-btn'),
+                  status=$('#split-status'), progress=$('#split-progress'), bar=progress.querySelector('.progress-bar'),
+                  modeConfig=$('#split-mode-config'), extraBtns=$('#split-extra-buttons'), expl=$('#split-explanation');
+            function updateUI(){
+                const mode = document.querySelector('input[name="split-mode"]:checked').value;
+                let html='',explHtml='',extra=''; status.textContent = '';
+                if(mode==='range'){
+                    html='<input type="text" id="range-input" class="config-input" placeholder="例: 1-3,5,7-9" style="width:100%;">';
+                    explHtml='<strong>页码范围：</strong>输入要提取的页码，合并为一个PDF。'; btn.style.display='';
+                }else if(mode==='fixed'){
+                    html='<input type="number" id="fixed-pages" min="1" value="1" style="width:100px;"> <span>每份页数</span>';
+                    explHtml='<strong>固定页数：</strong>每N页拆分为一个PDF，最后一份可能不足。'; btn.style.display='';
+                }else if(mode==='single'){
+                    html='<span>每一页拆分为独立PDF文件。</span>';
+                    explHtml='<strong>全部单页：</strong>每页生成单独PDF。'; btn.style.display='';
+                }else if(mode==='odd_even'){
+                    html='<span>选择抽取奇数页或偶数页。</span>';
+                    explHtml='<strong>奇偶拆分：</strong>分别抽取奇数页或偶数页生成新PDF。';
+                    btn.style.display='none';
+                    extra='<button class="btn btn-sm" id="extract-odd">📂 抽取奇数页</button> <button class="btn btn-sm" id="extract-even">📂 抽取偶数页</button>';
+                }
+                modeConfig.innerHTML=html; expl.innerHTML=explHtml; extraBtns.innerHTML=extra;
+                if(mode==='odd_even'){
+                    $('#extract-odd').addEventListener('click',()=>extractOddEven(true));
+                    $('#extract-even').addEventListener('click',()=>extractOddEven(false));
+                }
+            }
+            async function extractOddEven(isOdd){
+                if(!splitFile){alert('请先上传PDF');return;}
+                status.textContent=isOdd?'抽取奇数页...':'抽取偶数页...'; progress.style.display='block';
+                try{
+                    const buf=await fileToArrayBuffer(splitFile); const src=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+                    const total=src.getPageCount(); const idxs=[];
+                    for(let i=0;i<total;i++){ const pn=i+1; if(isOdd&&pn%2===1) idxs.push(i); else if(!isOdd&&pn%2===0) idxs.push(i); }
+                    if(!idxs.length){status.textContent='没有符合的页面';return;}
+                    const newPdf=await PDFLib.PDFDocument.create(); const pages=await newPdf.copyPages(src,idxs);
+                    pages.forEach(p=>newPdf.addPage(p)); const bytes=await newPdf.save();
+                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(splitFile.name)}_${isOdd?'奇数页':'偶数页'}.pdf`);
+                    status.textContent=`✅ ${isOdd?'奇数页':'偶数页'}已下载`;
+                }catch(e){status.textContent='❌ '+e.message;} finally{progress.style.display='none';}
+            }
+            document.querySelectorAll('input[name="split-mode"]').forEach(r=>r.addEventListener('change',updateUI));
+            updateUI();
+            async function loadFile(file){
+                if(file.type!=='application/pdf') return;
+                status.textContent='读取中...'; progress.style.display='block';
+                try{ pageCount=await getPdfPageCount(file); splitFile=file; name.textContent=file.name; pagesSpan.textContent=pageCount+' 页'; info.style.display=''; btn.disabled=false; status.textContent=''; }catch(e){status.textContent='❌ 读取失败';}
+                finally{progress.style.display='none';}
+            }
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])});
+            input.addEventListener('change',e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); input.value=''; });
+            btn.addEventListener('click',async ()=>{
+                if(!splitFile) return; const mode=document.querySelector('input[name="split-mode"]:checked').value;
+                if(mode==='odd_even') return;
+                btn.disabled=true; status.textContent='拆分中...'; progress.style.display='block';
+                try{
+                    const buf=await fileToArrayBuffer(splitFile); const src=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+                    const total=src.getPageCount(); let ranges=[];
+                    if(mode==='range'){
+                        const inputVal=document.getElementById('range-input').value.trim();
+                        if(!inputVal) throw new Error('请输入页码范围');
+                        const pages=parsePageRanges(inputVal,total); if(!pages.length) throw new Error('未选中页面');
+                        ranges=[pages];
+                    }else if(mode==='fixed'){
+                        const per=parseInt(document.getElementById('fixed-pages').value,10);
+                        if(per<1) throw new Error('页数必须>0');
+                        for(let i=0;i<total;i+=per) ranges.push([...Array(Math.min(per,total-i)).keys()].map(k=>i+k));
+                    }else if(mode==='single'){ for(let i=0;i<total;i++) ranges.push([i]); }
+                    for(let idx=0;idx<ranges.length;idx++){
+                        const idxs=ranges[idx]; const newPdf=await PDFLib.PDFDocument.create();
+                        const pages=await newPdf.copyPages(src,idxs); pages.forEach(p=>newPdf.addPage(p));
+                        const bytes=await newPdf.save(); const base=getBaseName(splitFile.name);
+                        let suffix=''; if(mode==='range') suffix='提取页'; else if(mode==='fixed') suffix='第'+(idx+1)+'部分'; else suffix='第'+(idxs[0]+1)+'页';
+                        downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${base}_${suffix}.pdf`);
+                        bar.style.width=((idx+1)/ranges.length*100)+'%'; await new Promise(r=>setTimeout(r,50));
+                    }
+                    status.textContent='✅ 完成，'+ranges.length+'个文件';
+                }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
+            });
+        })();
+
+        // ---------- 旋转 ----------
+        (function(){
+            let file=null,pageCount=0;
+            const area=$('#rotate-upload-area'), input=$('#rotate-file-input'), info=$('#rotate-file-info'),
+                  name=$('#rotate-file-name'), pagesSpan=$('#rotate-file-pages'), btn=$('#rotate-btn'),
+                  status=$('#rotate-status'), progress=$('#rotate-progress');
+            async function loadFile(f){
+                if(f.type!=='application/pdf') return;
+                status.textContent='读取中...'; progress.style.display='block';
+                try{ pageCount=await getPdfPageCount(f); file=f; name.textContent=f.name; pagesSpan.textContent=pageCount+' 页'; info.style.display=''; btn.disabled=false; status.textContent=''; }catch(e){status.textContent='❌ 读取失败';}
+                finally{progress.style.display='none';}
+            }
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])});
+            input.addEventListener('change',e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); input.value=''; });
+            btn.addEventListener('click',async ()=>{
+                if(!file) return;
+                const rangeStr=$('#rotate-range-input').value.trim();
+                const dir=document.querySelector('input[name="rotate-direction"]:checked').value;
+                btn.disabled=true; status.textContent='旋转中...'; progress.style.display='block';
+                try{
+                    const buf=await fileToArrayBuffer(file); const pdf=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+                    const total=pdf.getPageCount(); let idxs;
+                    if(!rangeStr) idxs=[...Array(total).keys()];
+                    else { idxs=parsePageRanges(rangeStr,total); if(!idxs.length) throw new Error('未选中页面'); }
+                    idxs.forEach(idx=>{
+                        const page=pdf.getPage(idx); const cur=page.getRotation().angle;
+                        let delta=0; if(dir==='left') delta=270; else if(dir==='right') delta=90; else if(dir==='180') delta=180;
+                        const newAngle = Math.round((cur + delta) % 360); page.setRotation(PDFLib.degrees(newAngle));
+                    });
+                    const bytes=await pdf.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已旋转.pdf`);
+                    status.textContent=`✅ 已旋转 ${idxs.length} 页`;
+                }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
+            });
+        })();
+
+        // ---------- 删除 ----------
+        (function(){
+            let file=null,pageCount=0;
+            const area=$('#delete-upload-area'), input=$('#delete-file-input'), info=$('#delete-file-info'),
+                  name=$('#delete-file-name'), pagesSpan=$('#delete-file-pages'), btn=$('#delete-btn'),
+                  status=$('#delete-status'), progress=$('#delete-progress');
+            async function loadFile(f){
+                if(f.type!=='application/pdf') return;
+                status.textContent='读取中...'; progress.style.display='block';
+                try{ pageCount=await getPdfPageCount(f); file=f; name.textContent=f.name; pagesSpan.textContent=pageCount+' 页'; info.style.display=''; btn.disabled=false; status.textContent=''; }catch(e){status.textContent='❌ 读取失败';}
+                finally{progress.style.display='none';}
+            }
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])});
+            input.addEventListener('change',e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); input.value=''; });
+            btn.addEventListener('click',async ()=>{
+                if(!file) return; const rangeStr=$('#delete-range-input').value.trim();
+                if(!rangeStr){alert('请输入要删除的页码');return;}
+                btn.disabled=true; status.textContent='删除中...'; progress.style.display='block';
+                try{
+                    const buf=await fileToArrayBuffer(file); const src=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+                    const total=src.getPageCount(); const toDel=parsePageRanges(rangeStr,total);
+                    if(!toDel.length) throw new Error('未选中有效页面');
+                    const keep=[]; for(let i=0;i<total;i++) if(!toDel.includes(i)) keep.push(i);
+                    if(!keep.length) throw new Error('删除后无页面');
+                    const newPdf=await PDFLib.PDFDocument.create(); const pages=await newPdf.copyPages(src,keep);
+                    pages.forEach(p=>newPdf.addPage(p)); const bytes=await newPdf.save();
+                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已删除.pdf`);
+                    status.textContent=`✅ 已删除 ${toDel.length} 页`;
+                }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
+            });
+        })();
+
+        // ---------- PDF转图片 ----------
+        (function(){
+            let doc=null, name='', pages=[];
+            const area=$('#convert-upload-area'), input=$('#convert-file-input'), info=$('#convert-file-info'),
+                  fname=$('#convert-file-name'), fpages=$('#convert-file-pages'), previewCont=$('#convert-preview-container'),
+                  grid=$('#convert-preview-grid'), pageCount=$('#convert-page-count'),
+                  fmtSel=$('#img-format'), qual=$('#img-quality'), qualVal=$('#quality-value'),
+                  scaleSel=$('#img-scale'), btnAll=$('#convert-download-all'), 
+                  status=$('#convert-status'), previewStatus=$('#convert-preview-status'), progress=$('#convert-progress');
+            qual.addEventListener('input',()=>qualVal.textContent=qual.value+'%');
+            async function loadFile(file){
+                if(!file||file.type!=='application/pdf'){ status.textContent='请上传PDF文件'; return; }
+                status.textContent = '正在加载...'; progress.style.display='block';
+                try{
+                    const buf=await file.arrayBuffer(); doc=await pdfjsLib.getDocument({data:buf}).promise;
+                    name=getBaseName(file.name); const total=doc.numPages;
+                    fname.textContent=file.name; fpages.textContent=total+' 页'; info.style.display=''; previewCont.style.display='';
+                    pages=[]; grid.innerHTML=''; pageCount.textContent=total;
+                    const scale=parseFloat(scaleSel.value); const frag = document.createDocumentFragment();
+                    for(let i=1;i<=total;i++){
+                        const page=await doc.getPage(i); const vp=page.getViewport({scale});
+                        const canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
+                        await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+                        pages.push({canvas,pageNum:i}); frag.appendChild(createItem(canvas,i));
+                    }
+                    grid.appendChild(frag); previewStatus.textContent = `✅ 已加载 ${total} 页`; status.textContent = '';
+                }catch(e){ console.error(e); status.textContent='❌ 加载失败'; } finally{ progress.style.display='none'; }
+            }
+            function createItem(canvas,num){
+                const div=document.createElement('div'); div.className='preview-item'; div.dataset.page=num;
+                const img=document.createElement('img'); img.className='page-thumb'; img.src=canvas.toDataURL('image/jpeg',0.7);
+                div.appendChild(img); const pinfo=document.createElement('div'); pinfo.className='page-info'; pinfo.textContent='第'+num+'页';
+                div.appendChild(pinfo); const btns=document.createElement('div'); btns.className='action-btns';
+                const dn=document.createElement('button'); dn.className='btn-icon-download'; dn.textContent='⬇';
+                dn.onclick=e=>{e.stopPropagation(); downloadSingle(num);}; btns.appendChild(dn); div.appendChild(btns);
+                return div;
+            }
+            function getOrigW(n){ return doc.getPage(n).then(p=>p.getViewport({scale:1}).width); }
+            async function downloadSingle(n){
+                const d=pages.find(p=>p.pageNum===n); if(!d) return;
+                const fmt=fmtSel.value, qualVal=parseInt(qual.value)/100, mime=fmt==='png'?'image/png':'image/jpeg';
+                const curScale=parseFloat(scaleSel.value); let canvas=d.canvas;
+                const ow=await getOrigW(n);
+                if(Math.abs(canvas.width-Math.round(ow*curScale))>5){
+                    const page=await doc.getPage(n); const vp=page.getViewport({scale:curScale});
+                    canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
+                    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+                }
+                const blob=await new Promise(r=>canvas.toBlob(r,mime,qualVal));
+                downloadBlob(blob,`${name}_提取页_${n}.${fmt==='png'?'png':'jpg'}`); previewStatus.textContent = '✅ 已下载';
+            }
+            btnAll.addEventListener('click',async ()=>{
+                if(!pages.length){ status.textContent='没有页面可下载'; return; }
+                status.textContent='正在打包...'; progress.style.display='block';
+                const fmt=fmtSel.value, qualVal=parseInt(qual.value)/100, mime=fmt==='png'?'image/png':'image/jpeg';
+                const ext=fmt==='png'?'png':'jpg', curScale=parseFloat(scaleSel.value);
+                const zip=new JSZip();
+                for(const p of pages){
+                    let canvas=p.canvas; const ow=await getOrigW(p.pageNum);
+                    if(Math.abs(canvas.width-Math.round(ow*curScale))>5){
+                        const page=await doc.getPage(p.pageNum); const vp=page.getViewport({scale:curScale});
+                        canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
+                        await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+                    }
+                    const blob=await new Promise(r=>canvas.toBlob(r,mime,qualVal));
+                    zip.file(`${name}_提取页_${String(p.pageNum).padStart(3,'0')}.${ext}`,blob);
+                }
+                const zipBlob=await zip.generateAsync({type:'blob'}); downloadBlob(zipBlob,`${name}_图片集.zip`);
+                status.textContent='✅ 下载完成'; progress.style.display='none';
+            });
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])});
+            input.addEventListener('change',e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); input.value=''; });
+        })();
+
+        // ---------- 图片转PDF ----------
+        (function(){
+            const images=[];
+            const area=$('#img2pdf-upload-area'), input=$('#img2pdf-file-input'), addBtn=$('#img2pdf-add-more'),
+                  countLabel=$('#img2pdf-count-label'), grid=$('#img2pdf-preview-grid'), emptyHint=$('#img2pdf-empty-hint'),
+                  status=$('#img2pdf-status');
+            function addFiles(files){
+                const valid=Array.from(files).filter(f=>f.type.startsWith('image/'));
+                if(!valid.length){ status.textContent='请选择图片文件'; return; }
+                status.textContent = '正在添加...';
+                valid.forEach(f=>{
+                    const r=new FileReader(); r.onload=()=>{ images.push({file:f,dataUrl:r.result,selected:false}); render(); countLabel.textContent='已添加'+images.length+'张'; status.textContent=''; };
+                    r.readAsDataURL(f);
+                });
+            }
+            function render(){
+                grid.innerHTML=''; if(images.length){ emptyHint.style.display='none'; images.forEach((d,i)=>grid.appendChild(createItem(d,i))); }
+                else emptyHint.style.display='';
+            }
+            function createItem(data,idx){
+                const div=document.createElement('div'); div.className='preview-item'; div.draggable=true; div.dataset.index=idx;
+                if(data.selected){ div.style.borderColor='var(--primary)'; div.style.boxShadow='0 0 0 3px rgba(37,99,235,0.2)'; }
+                const cw=document.createElement('div'); cw.className='checkbox-wrap';
+                const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=data.selected;
+                cb.onchange=()=>{data.selected=cb.checked; div.style.borderColor=data.selected?'var(--primary)':'var(--border)';};
+                cw.appendChild(cb); div.appendChild(cw);
+                const img=document.createElement('img'); img.className='page-thumb'; img.src=data.dataUrl; div.appendChild(img);
+                const info=document.createElement('div'); info.className='page-info'; info.textContent=data.file.name.length>20?data.file.name.substring(0,18)+'…':data.file.name;
+                div.appendChild(info); return div;
+            }
+            $('#img2pdf-sel-all').addEventListener('click',()=>{images.forEach(d=>d.selected=true);render();});
+            $('#img2pdf-desel-all').addEventListener('click',()=>{images.forEach(d=>d.selected=false);render();});
+            $('#img2pdf-del-sel').addEventListener('click',()=>{
+                const cnt=images.filter(d=>d.selected).length; if(!cnt){ status.textContent='请勾选图片'; return; }
+                if(!confirm(`删除${cnt}张？`)) return;
+                for(let i=images.length-1;i>=0;i--) if(images[i].selected) images.splice(i,1);
+                render(); countLabel.textContent='已添加'+images.length+'张'; status.textContent='';
+            });
+            $('#img2pdf-export').addEventListener('click',async ()=>{
+                if(!images.length){ status.textContent='没有图片'; return; }
+                status.textContent='正在生成PDF...'; 
+                try{
+                    const pdf=await PDFLib.PDFDocument.create();
+                    for(const d of images){
+                        const buf=await fetch(d.dataUrl).then(r=>r.arrayBuffer()); let embed;
+                        if(d.file.type==='image/jpeg') embed=await pdf.embedJpg(buf);
+                        else if(d.file.type==='image/png') embed=await pdf.embedPng(buf);
+                        else {
+                            const tmpImg=new Image(); await new Promise((res,rej)=>{tmpImg.onload=res;tmpImg.onerror=rej;tmpImg.src=d.dataUrl;});
+                            const canvas=document.createElement('canvas');canvas.width=tmpImg.naturalWidth;canvas.height=tmpImg.naturalHeight;
+                            canvas.getContext('2d').drawImage(tmpImg,0,0); const pngBlob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+                            embed=await pdf.embedPng(await pngBlob.arrayBuffer());
+                        }
+                        const page=pdf.addPage([595.28,841.89]); const dims=embed.scaleToFit(595.28-40,841.89-40);
+                        page.drawImage(embed,{x:(595.28-dims.width)/2,y:(841.89-dims.height)/2,width:dims.width,height:dims.height});
+                    }
+                    const bytes=await pdf.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),'图片转PDF.pdf');
+                    status.textContent='✅ 导出成功';
+                }catch(e){ console.error(e); status.textContent='❌ 导出失败'; }
+            });
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files.length) addFiles(e.dataTransfer.files)});
+            input.addEventListener('change',e=>{ if(e.target.files.length) addFiles(e.target.files); input.value=''; });
+            addBtn.addEventListener('click',()=>input.click());
+        })();
+
+        // ---------- 页面重排 ----------
+        (function(){
+            const pdfDataList=[]; let pagesData=[];
+            const BADGE=['#4f6ef7','#e74c5e','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db'];
+            const area=$('#manage-upload-area'), input=$('#manage-file-input'), fileListCont=$('#manage-file-list-container'),
+                  addMore=$('#manage-add-more'), grid=$('#manage-preview-grid'), emptyHint=$('#manage-empty-hint'),
+                  addBlank=$('#manage-add-blank'), selAll=$('#manage-sel-all'), deselAll=$('#manage-desel-all'),
+                  delSel=$('#manage-del-sel'), exportBtn=$('#manage-export'), status=$('#manage-status');
+            function renderFileList(){
+                if(!pdfDataList.length){ fileListCont.innerHTML='<div style="color:var(--text-secondary);">尚未选择文件</div>'; return; }
+                fileListCont.innerHTML = pdfDataList.map((entry,idx)=>`
+                    <div style="display:flex;align-items:center;gap:8px;padding:4px;background:#fff;border-radius:6px;margin-bottom:4px;">
+                        <input type="checkbox" ${entry.selected?'checked':''} data-idx="${idx}" class="manage-file-cb">
+                        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${entry.fileName}</span>
+                        <span style="color:var(--primary);font-size:0.8rem;">${entry.pdfJsDoc.numPages}页</span>
+                    </div>`).join('');
+                document.querySelectorAll('.manage-file-cb').forEach(cb=>{
+                    cb.addEventListener('change',function(){ const idx=parseInt(this.dataset.idx); pdfDataList[idx].selected=this.checked; rebuildPages(); renderPreviews(); });
+                });
+            }
+            function rebuildPages(){
+                pagesData=[]; pdfDataList.forEach((entry,idx)=>{ if(!entry.selected||!entry.pagesThumbnails) return;
+                    entry.pagesThumbnails.forEach((thumb,pi)=> pagesData.push({pdfIndex:idx,pageIndex:pi,pageNum:pi+1,thumbnailUrl:thumb,selected:false,isBlank:false}));
+                });
+            }
+            function renderPreviews(){
+                grid.innerHTML=''; if(pagesData.length){ emptyHint.style.display='none'; pagesData.forEach((p,i)=>grid.appendChild(createItem(p,i))); }
+                else emptyHint.style.display='';
+            }
+            let dragSourceIndex = -1;
+            function createItem(pd,idx){
+                const entry=pdfDataList[pd.pdfIndex]; const color=entry?entry.colorClass:'#888';
+                const name=entry?(entry.fileName.length>14?entry.fileName.substring(0,12)+'…':entry.fileName):(pd.isBlank?'空白页':'未知');
+                const div=document.createElement('div'); div.className='preview-item'; div.draggable=true; div.dataset.index=idx;
+                if(pd.selected){ div.style.borderColor='var(--primary)'; div.style.boxShadow='0 0 0 3px rgba(37,99,235,0.2)'; }
+                const cw=document.createElement('div'); cw.className='checkbox-wrap';
+                const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=pd.selected;
+                cb.onchange=()=>{pd.selected=cb.checked; div.style.borderColor=pd.selected?'var(--primary)':'var(--border)';};
+                cw.appendChild(cb); div.appendChild(cw);
+                const img=document.createElement('img'); img.className='page-thumb'; img.src=pd.thumbnailUrl; img.draggable=false; div.appendChild(img);
+                const info=document.createElement('div'); info.className='page-info';
+                if(pd.isBlank) info.innerHTML='<span style="background:#eee;padding:0 6px;border-radius:6px;">➕空白页</span>';
+                else info.innerHTML=`<span style="background:${color}20;color:${color};padding:0 6px;border-radius:6px;">${name}</span> P${pd.pageNum}`;
+                div.appendChild(info);
+                div.addEventListener('dragstart', function(e) { dragSourceIndex = idx; this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', idx); });
+                div.addEventListener('dragend', function(e) { this.classList.remove('dragging'); clearAllDropHighlights(); dragSourceIndex = -1; });
+                div.addEventListener('dragover', function(e) { e.preventDefault(); if (dragSourceIndex === -1) return; const targetIdx = parseInt(this.dataset.index); if (targetIdx === dragSourceIndex) return; e.dataTransfer.dropEffect = 'move'; this.classList.add('drag-over-before'); });
+                div.addEventListener('dragleave', function(e) { this.classList.remove('drag-over-before'); });
+                div.addEventListener('drop', function(e) {
+                    e.preventDefault(); this.classList.remove('drag-over-before');
+                    if (dragSourceIndex === -1) return; const targetIdx = parseInt(this.dataset.index);
+                    if (targetIdx === dragSourceIndex) return;
+                    const movedItem = pagesData.splice(dragSourceIndex, 1)[0]; pagesData.splice(targetIdx, 0, movedItem);
+                    dragSourceIndex = -1; renderPreviews(); status.textContent = '✅ 顺序已更新';
+                });
+                return div;
+            }
+            function clearAllDropHighlights() { const items = document.querySelectorAll('#manage-preview-grid .preview-item'); items.forEach(item => item.classList.remove('drag-over-before', 'drag-over-after')); }
+            async function handleUploads(files){
+                const pdfs=Array.from(files).filter(f=>f.type==='application/pdf');
+                if(!pdfs.length){ status.textContent='请上传PDF文件'; return; }
+                status.textContent = '正在加载...';
+                try{
+                    for(const file of pdfs){
+                        const buf=await file.arrayBuffer(); const [libDoc,jsDoc]=await Promise.all([PDFLib.PDFDocument.load(buf), pdfjsLib.getDocument({data:buf.slice(0)}).promise]);
+                        const color=BADGE[pdfDataList.length%BADGE.length];
+                        const entry={arrayBuffer:buf,pdfLibDoc:libDoc,pdfJsDoc:jsDoc,fileName:file.name,colorClass:color,selected:true,pagesThumbnails:[]};
+                        for(let p=1;p<=jsDoc.numPages;p++){
+                            const page=await jsDoc.getPage(p); const vp=page.getViewport({scale:0.35});
+                            const canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;
+                            await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+                            entry.pagesThumbnails.push(canvas.toDataURL('image/jpeg',0.6));
+                        }
+                        pdfDataList.push(entry);
+                    }
+                    rebuildPages(); renderFileList(); renderPreviews(); status.textContent = '✅ 加载完成';
+                }catch(e){ console.error(e); status.textContent='❌ 加载失败'; }
+            }
+            addBlank.addEventListener('click',async ()=>{
+                const num=prompt('请输入空白页数量','1'); const count=parseInt(num);
+                if(isNaN(count)||count<1){ status.textContent='请输入有效数字'; return; }
+                status.textContent='添加空白页...';
+                try{
+                    let w=595.28,h=841.89;
+                    if(pdfDataList.length>0){ const first=pdfDataList[0].pdfJsDoc; const page=await first.getPage(1); const vp=page.getViewport({scale:1}); w=vp.width;h=vp.height; }
+                    const thumbCanvas=document.createElement('canvas'); thumbCanvas.width=w*0.35;thumbCanvas.height=h*0.35;
+                    const ctx=thumbCanvas.getContext('2d'); ctx.fillStyle='#fff';ctx.fillRect(0,0,thumbCanvas.width,thumbCanvas.height);
+                    ctx.strokeStyle='#ccc';ctx.lineWidth=2;ctx.strokeRect(1,1,thumbCanvas.width-2,thumbCanvas.height-2);
+                    const thumbUrl=thumbCanvas.toDataURL();
+                    const blankEntry={pdfLibDoc:null,pdfJsDoc:null,fileName:'空白页',colorClass:'#999',selected:true,pagesThumbnails:[],isBlankSource:true,blankWidth:w,blankHeight:h};
+                    for(let i=0;i<count;i++) blankEntry.pagesThumbnails.push(thumbUrl);
+                    pdfDataList.push(blankEntry); rebuildPages(); renderFileList(); renderPreviews();
+                    status.textContent = `✅ 已添加${count}张空白页`;
+                }catch(e){ console.error(e); status.textContent='❌ 添加失败'; }
+            });
+            selAll.addEventListener('click',()=>{pagesData.forEach(p=>p.selected=true);renderPreviews();});
+            deselAll.addEventListener('click',()=>{pagesData.forEach(p=>p.selected=false);renderPreviews();});
+            delSel.addEventListener('click',()=>{ const cnt=pagesData.filter(p=>p.selected).length; if(!cnt){ status.textContent='请勾选页面'; return; } if(!confirm(`删除${cnt}页？`)) return; pagesData=pagesData.filter(p=>!p.selected); renderPreviews(); status.textContent='✅ 已删除'; });
+            exportBtn.addEventListener('click',async ()=>{
+                if(!pagesData.length){ status.textContent='没有页面可导出'; return; }
+                status.textContent='正在生成PDF...';
+                try{
+                    const merged=await PDFLib.PDFDocument.create();
+                    for(const p of pagesData){
+                        if(p.isBlank||(pdfDataList[p.pdfIndex]&&pdfDataList[p.pdfIndex].isBlankSource)){ const entry=pdfDataList[p.pdfIndex]; merged.addPage([entry.blankWidth||595.28,entry.blankHeight||841.89]); }
+                        else{ const src=pdfDataList[p.pdfIndex].pdfLibDoc; const [copied]=await merged.copyPages(src,[p.pageIndex]); merged.addPage(copied); }
+                    }
+                    const bytes=await merged.save(); const firstName=pdfDataList.length?getBaseName(pdfDataList[0].fileName):'文档';
+                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${firstName}_页面重排.pdf`); status.textContent='✅ 导出成功';
+                }catch(e){ console.error(e); status.textContent='❌ 导出失败'; }
+            });
+            area.addEventListener('click',()=>input.click());
+            area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('drag-over')});
+            area.addEventListener('dragleave',()=>area.classList.remove('drag-over'));
+            area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleUploads(e.dataTransfer.files)});
+            input.addEventListener('change',e=>{ if(e.target.files.length) handleUploads(e.target.files); input.value=''; });
+            addMore.addEventListener('click',()=>input.click());
+            document.addEventListener('keydown',e=>{
+                if(!document.getElementById('tab-manage').classList.contains('active')) return;
+                if((e.ctrlKey||e.metaKey)&&e.key==='a'){ e.preventDefault(); pagesData.forEach(p=>p.selected=true); renderPreviews(); status.textContent=''; }
+                if(e.key==='Delete'||e.key==='Backspace'){
+                    const cnt=pagesData.filter(p=>p.selected).length;
+                    if(cnt&&confirm(`删除选中的 ${cnt} 页？`)){ pagesData=pagesData.filter(p=>!p.selected); renderPreviews(); status.textContent=''; }
+                }
+            });
+        })();
+
+        console.log('✅ 离线PDF工具箱已启动');
+    })();
+    </script>
+</body>
+</html>
